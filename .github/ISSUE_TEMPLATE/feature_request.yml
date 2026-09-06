@@ -1,0 +1,52 @@
+name: 需求 / Feature
+description: 提出可跟踪、可验收的产品需求
+title: "[需求] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户目标与背景
+      description: 谁需要什么能力，当前遇到什么问题？
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围与边界
+      description: 写明本次包含和不包含的能力，以及国家、商店和数据口径。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 使用可执行、可观察的标准，较大需求请链接 docs/requirements 文档。
+      placeholder: "- [ ] AC-01：……"
+    validations:
+      required: true
+  - type: textarea
+    id: tracking
+    attributes:
+      label: 角色、阶段与关联证据
+      value: |
+        当前阶段：需求提出
+        CEO：
+        PM：
+        CTO：
+        Alex：
+        需求文档：
+        实现 PR：
+        CTO 自检：
+        Alex 测试报告：
+        PM 验收报告：
+        依赖 / 子议题：
+  - type: checkboxes
+    id: workflow
+    attributes:
+      label: 完成条件（交付阶段更新）
+      options:
+        - label: PM 已明确需求和验收标准
+        - label: CTO 已完成实现和自检
+        - label: Alex 已完成独立测试与必要回归
+        - label: PM 已完成验收，所有 P0 问题已解决
+        - label: 文档、报告与 PR 已关联后才关闭需求
