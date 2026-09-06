@@ -55,11 +55,11 @@ GitHub 仓库、Issues 和 Pull Requests 是本项目需求与交付的正式记
 - 代码及报告已提交 GitHub，Issue 和 PR 相互关联。
 - 无未解决 P0 缺陷；其他已知问题有独立追踪和明确边界。
 
-## 首版建议议题拆分
+## 首版 GitHub 议题
 
-1. **[需求] Appeye MVP：信贷应用市场监测范围与验收**：由 PM 维护完整需求，作为父议题，在整体验收前保持打开。
-2. **[实现] 双商店采集、SQLite 历史与持久任务**：覆盖 AC-03 至 AC-10 相关后端能力，链接父议题。
-3. **[实现] 管理员后台、应用库与市场观察页面**：覆盖 AC-02、AC-11 至 AC-13 及前端相关验收，链接父议题。
-4. **[验收] Alex 回归与 PM 首版验收**：汇总 AC-01 至 AC-15 证据，跟踪报告和遗留缺陷，链接父议题。
+1. **[PM 需求 #1](https://github.com/zequnjiang/appeye/issues/1)**：由 PM 维护完整需求，作为父议题，在整体验收前保持打开。
+2. **[数据采集后端 #2](https://github.com/zequnjiang/appeye/issues/2)**：覆盖 AC-03 至 AC-10 相关后端能力，链接父议题。
+3. **[管理后台 #3](https://github.com/zequnjiang/appeye/issues/3)**：覆盖 AC-02、AC-11 至 AC-13 及前端相关验收，链接父议题。
+4. **[回归与验收 #4](https://github.com/zequnjiang/appeye/issues/4)**：汇总 AC-01 至 AC-15 证据，跟踪报告和遗留缺陷，链接父议题。
 
-实际 Issue 和 PR 编号建立后写入父议题与交付报告，不在模板中伪造链接。
+实现分支为 `codex/mvp-credit-monitor`。PR 建立后将实际链接写入父议题与交付报告；所有议题须在对应测试和 PM 验收完成后再关闭。

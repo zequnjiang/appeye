@@ -4,7 +4,7 @@
 - 版本：MVP 1.0
 - 需求日期：2026-09-07
 - GitHub 仓库：[zequnjiang/appeye](https://github.com/zequnjiang/appeye)
-- 需求、实现、测试和验收议题：由主 Agent 在 GitHub 建立并补充实际链接，流转见 [工作流](../workflow.md)。
+- GitHub 跟踪：[需求 #1](https://github.com/zequnjiang/appeye/issues/1)、[数据采集后端 #2](https://github.com/zequnjiang/appeye/issues/2)、[管理后台 #3](https://github.com/zequnjiang/appeye/issues/3)、[回归与验收 #4](https://github.com/zequnjiang/appeye/issues/4)。流转见 [工作流](../workflow.md)。
 
 ## 1. 产品目标
 
@@ -41,6 +41,7 @@ Appeye 帮助信贷行业研究人员持续观察不同国家 Google Play 和 Ap
 ### 4.1 身份与发现
 
 - 跟踪对象以 `(country, store, storeAppId)` 唯一标识，同一应用在不同国家为不同跟踪对象。
+- 实现中商店应用标识的 API / TypeScript 字段命名为 `externalId`，对应需求中的 `storeAppId`；不应与数据库内部的应用记录 ID 混淆。
 - Google Play 使用包名；App Store 使用商店数值 ID，并在可用时保留 bundleId。
 - `firstSeenAt` 是本系统首次观测时间，绝不能写成实际新上架时间。
 - `releasedAt` 是商店返回的发布日期，可为空；`storeUpdatedAt` 是商店披露的更新时间，可为空。
