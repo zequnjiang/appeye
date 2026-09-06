@@ -5,6 +5,11 @@ import { normalizeDeveloperContinuation } from './developer-continuation.js';
 import { decodeGoogleDeveloperId, googleDeveloperRequestUrl } from './developer-route.js';
 import { describeTransportError } from './transport-error.js';
 import {
+  ReviewSourceValidationError,
+  validateAppleReviewResponse,
+  validateGoogleReviewResponse,
+} from './review-source-validation.js';
+import {
   createProviders,
   normalizeApp,
   normalizeReview,
@@ -479,17 +484,75 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         };
       },
       async reviewsPage(input) {
-        const raw = await client.reviews({
-          ...context(input),
-          ...(store === 'google-play'
-            ? {
-                appId: input.externalId,
-                sort: googlePlay.sort.NEWEST,
-                paginate: true,
-                ...(input.cursor ? { nextPaginationToken: input.cursor } : {}),
+        const appleSource = `https://itunes.apple.com/${input.country}/rss/customerreviews/page=${input.page}/id=${input.externalId}/sortby=${apple.sort.RECENT}/xml`;
+        let sourceValidationError: ReviewSourceValidationError | undefined;
+        const reviewFetch: typeof fetch = async (requestInput, init) => {
+          const request = requestInput instanceof Request ? requestInput : undefined;
+          const url = new URL(request?.url ?? String(requestInput));
+          let googleReviewRequest = false;
+          if (
+            store === 'google-play' &&
+            url.origin === 'https://play.google.com' &&
+            url.pathname === '/_/PlayStoreUi/data/batchexecute'
+          ) {
+            // The SDK's URL names qnKhOb, while its actual review request uses UsvDTd.
+            // Inspect a clone so request streams and the original HTTP record stay intact.
+            const body = init?.body ?? (request ? await request.clone().text() : undefined);
+            if (typeof body === 'string' || body instanceof URLSearchParams) {
+              try {
+                const batches: unknown = JSON.parse(
+                  new URLSearchParams(body).get('f.req') ?? 'null',
+                );
+                googleReviewRequest =
+                  Array.isArray(batches) &&
+                  batches.some(
+                    (batch) =>
+                      Array.isArray(batch) &&
+                      batch.some((rpc) => Array.isArray(rpc) && rpc[0] === 'UsvDTd'),
+                  );
+              } catch {
+                // Request validation remains with the SDK; do not attribute unrelated RPCs.
               }
-            : { id: input.externalId, sort: apple.sort.RECENT, page: input.page }),
-        });
+            }
+          }
+          const response = await fetcher(requestInput, init);
+          // fetcher has durably journaled the original body before any source validation.
+          // Keep semantic errors outside its transport catch so HTTP200 remains HTTP200.
+          if (response.ok) {
+            const body =
+              transportSources.get(response)?.record.body ?? (await response.clone().text());
+            try {
+              if (googleReviewRequest) validateGoogleReviewResponse(body);
+              if (store === 'app-store' && url.href === appleSource)
+                validateAppleReviewResponse(body);
+            } catch (error) {
+              if (error instanceof ReviewSourceValidationError) sourceValidationError = error;
+              throw error;
+            }
+          }
+          return response;
+        };
+        const raw = await client
+          .reviews({
+            ...context(input),
+            requestOptions:
+              store === 'google-play'
+                ? { timeoutMs, retries: 0, signal: input.signal, fetchImpl: reviewFetch }
+                : { timeout: timeoutMs, retries: 0, signal: input.signal, fetch: reviewFetch },
+            ...(store === 'google-play'
+              ? {
+                  appId: input.externalId,
+                  sort: googlePlay.sort.NEWEST,
+                  paginate: true,
+                  ...(input.cursor ? { nextPaginationToken: input.cursor } : {}),
+                }
+              : { id: input.externalId, sort: apple.sort.RECENT, page: input.page }),
+          })
+          .catch((error: unknown) => {
+            // Both SDKs can wrap fetch exceptions as generic network failures. Preserve
+            // our known semantic failure so the task ledger distinguishes a bad source.
+            throw sourceValidationError ?? error;
+          });
         const rows = store === 'google-play' ? raw?.data : raw;
         if (!Array.isArray(rows)) throw new Error('Reviews response is not an array');
         return {
@@ -500,7 +563,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           source:
             store === 'google-play'
               ? `https://play.google.com/store/apps/details?id=${encodeURIComponent(input.externalId)}&gl=${input.country}&hl=${input.language}`
-              : `https://itunes.apple.com/${input.country}/rss/customerreviews/page=${input.page}/id=${input.externalId}/sortby=mostrecent/xml`,
+              : appleSource,
           nextCursor: store === 'google-play' ? (raw.nextPaginationToken ?? null) : null,
         };
       },
