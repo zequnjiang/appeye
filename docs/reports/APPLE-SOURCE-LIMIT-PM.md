@@ -1,11 +1,11 @@
-# 六项Apple资料：PM本轮来源限制验收
+# 十二项Apple资料：PM本轮来源限制验收
 
-- 结论：**接受下列6项为本轮`source-unavailable`限定终止；它们仍是已尝试但失败、未取得资料，不是成功或成功空。#11整体未完成。**
+- 结论：**初始6项与后续MX/PH新增6项均接受为本轮`source-unavailable`限定终止，共12项、4条市场记录、2个不同Apple商店ID；它们仍是已尝试但失败、未取得资料，不是成功或成功空。#11整体未完成。**
 - 关联：[运营 #11](https://github.com/zequnjiang/appeye/issues/11)、[FS-SU-01至07要求](../requirements/FULL-SCAN-2026-09-07.md#已证公开来源不可获取的终止口径)。与Google Play[#14路由修复](https://github.com/zequnjiang/appeye/issues/14)无共同根因；BCA目录告警及其余采集任务不在本次接受范围。
-- 运行基线：runtime-4的有界错误cause记录和有限重试，最终110项工程回归由Alex完成。PM本次没有启动采集、联网探测或真实库写入。
-- 证据：[Alex正式独立核查](APPLE-SOURCE-LIMIT-ALEX.md)、`data/batches/finance-2026-09-07-alex-apple-source-limit.json`（errorCount=0），及CEO保存的`finance-2026-09-07-apple-url-probe.json`。PM已分别读取并核对这些证据。
+- 运行基线：初始6项为runtime-4的有界错误cause记录和有限重试，当时110项工程回归由Alex完成；后续runtime-5沿用该诊断能力，最新工程检查120项通过，新增市场按原3次预算结束。PM没有启动采集、联网探测或真实库写入。
+- 证据：初始[Alex独立核查](APPLE-SOURCE-LIMIT-ALEX.md)、`data/batches/finance-2026-09-07-alex-apple-source-limit.json`；新增范围见[Alex Apple全量阶段](FULL-SCAN-ALEX.md#第二项阶段结果apple-七类补充全量核查)、`data/batches/finance-2026-09-07-alex-apple-supplements.json`。两次errorCount均为0。CEO保存的三个官方探测文件与PM直接只读复核见下文。
 
-## 精确接受范围
+## 初始六项接受范围
 
 | 市场记录 / 商店ID | 资料类型 | 任务ID | 最终状态 / 累计尝试 | 最终失败时间UTC |
 | --- | --- | ---: | --- | --- |
@@ -32,7 +32,7 @@ Alex于`2026-09-06T19:16:00.850Z`完成独立只读核查。PM于`19:17:20.659Z`
 - 旧1–3次记录和时间仍存在，新4–6次另行追加。原三次没有部署前逐字段/字节指纹，验收不声称做过不存在的“旧记录字节不变”比较。历史中原无成功资料，当前null没有清空一份应保留的旧成功。
 - 两个App的详情任务仍succeeded。CEO探测文件SHA-256与Alex核查引用一致。
 
-## FS-SU逐项判断
+## 初始六项FS-SU逐项判断
 
 | 条件 | 结果与依据 |
 | --- | --- |
@@ -44,8 +44,29 @@ Alex于`2026-09-06T19:16:00.850Z`完成独立只读核查。PM于`19:17:20.659Z`
 | FS-SU-06 独立验证 | 通过；CTO诊断变更、CEO有限执行/直接探测、Alex及PM各自只读核查齐备，发生/诊断/重试时间分开。 |
 | FS-SU-07 完成表达 | 接受限定表述：“本轮上述6项因已证官方页面循环未能取得，有限采集尝试已终止。”必须继续显示6项失败，不称6项资料采集成功。 |
 
+## 新增MX/PH六项终态与FS-SU验收
+
+**新增六项来源限制通过。** 这些任务不是最初6项的再次恢复，而是同一个Apple ID在另外两个市场的独立采集。原三次已具备原因记录，实际全部结束后按FS-SU-04审查，不为凑次数再执行到六次。
+
+| 市场记录 / 商店ID | 资料类型 | 任务ID | 最终状态 / 累计尝试 | 最终失败时间UTC |
+| --- | --- | ---: | --- | --- |
+| App1638 / MX / Apple1089271220 | privacy | 19752 | failed / 3 | 19:33:16.278 |
+| App1638 / MX / Apple1089271220 | versionHistory | 19753 | failed / 3 | 19:33:18.214 |
+| App1638 / MX / Apple1089271220 | inAppPurchases | 19754 | failed / 3 | 19:33:20.457 |
+| App1819 / PH / Apple1089271220 | privacy | 21200 | failed / 3 | 19:43:12.148 |
+| App1819 / PH / Apple1089271220 | versionHistory | 21201 | failed / 3 | 19:43:14.172 |
+| App1819 / PH / Apple1089271220 | inAppPurchases | 21202 | failed / 3 | 19:43:16.187 |
+
+日期仍为UTC的2026-09-06。CEO分别保存`data/batches/finance-2026-09-07-apple-mx-url-probe.json`和`data/batches/finance-2026-09-07-apple-ph-loans-url-probe.json`。实际官方入口均先301到本国canonical地址，再301到自身：MX于19:33:04.744Z，PH于19:43:21.551Z。PM直接读取这两份已保存链，核对country与`id1089271220`；没有借用PK或另一PH应用的链，也没有把诊断探测当成功采集响应。
+
+三份证据文件的SHA-256与Alex全量报告逐一一致，初始文件未覆盖：原PH/PK文件`43e5f5bfa1803f097d259baab261d6cccb0222855c4250e649aa231afbd05149`；MX文件`a1c2ee4d9856c21aa575dafcd8923798db3199b83f3408e2375f2ed5e1bbd6e6`；新增PH文件`0b4ab5c659200d8cda38d91276bfa3cf91bc4a3d864dfa9c07d2ec78455e2aa7`。
+
+Alex于19:53:31.286Z至19:53:39.774Z完成独立全量核查。PM于19:56:32.774Z至19:56:48.801Z另开只读事务，直接复核全部12个失败任务、54条attempt、54条HTTP及54条失败history，逐条任务顺序、时间区间、来源ID/国家和错误匹配；诊断增强后的36条HTTP均含`redirect count exceeded`，初期18条原始`fetch failed`仍在。新增6项各3条序号1–3完整，初始6项仍各6次，原PM已存的当前失败字段与尝试数不变，没有再试。自身摘要为`.artifacts/pm-apple-supplements.json`，errorCount=0。
+
+新增范围的FS-SU-01至07均满足：任务/市场/类型/时间固定；两国各有真实官方自循环链；实际URL和底层cause一致且无已知可用内部修复；原有限3次预算全部结束；仍failed、无成功response/data/raw/lastSuccessAt；CTO/CEO执行证据经Alex及PM分别核对；结论仅限本轮六项未能取得。四条受影响市场记录的详情、ratings及developer任务各自仍succeeded，未将整个App判为不可获取。
+
 ## 后续统计与边界
 
-在最终运营报告中，这6项计入“已尝试”“失败”“PM已接受的本轮来源限制”，不计入“成功取得”“成功空”或“商店不支持”。保留全部身份、URL、失败历史及诊断文件，后续若官方页面恢复或出现可靠新入口，可重新安排明确批次采集；本判断不意味着永久无资料、App下架、无隐私政策或无IAP。
+在最终运营报告中，这12项计入“已尝试”“失败”“PM已接受的本轮来源限制”，不计入“成功取得”“成功空”或“商店不支持”。范围是4条country/store/externalId市场记录、2个不同Apple商店ID，不能写成4个不同产品。保留全部身份、URL、失败历史及诊断文件，后续若官方页面恢复或出现可靠新入口，可重新安排明确批次采集；本判断不意味着永久无资料、App下架、无隐私政策或无IAP。
 
-这项接受仅使本轮已证外部限制可解释，不允许直接修改任务为成功或清空错误。其余2,024市场记录的补充/评论仍按既定范围继续，未解决BCA警告、未尝试项或可继续分页不能借用本结论。**仅六项来源限制通过，整体#11和PR #12仍未最终验收。**
+这项接受仅使本轮已证外部限制可解释，不允许直接修改任务为成功或清空错误。全部2,024市场记录的七类补充处理已另行通过[阶段验收](FULL-SCAN-PM-ACCEPTANCE.md)，BCA两项仍按[部分目录限定结论](DEVELOPER-SOURCE-ERROR-PM.md)保留告警。全部可继续评论流仍须执行与审计；本结论不能覆盖未尝试页或尚可恢复的分页。**十二项来源限制通过，整体#11和PR #12仍未最终验收。**

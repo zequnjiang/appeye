@@ -183,3 +183,63 @@ runtime 5 之后的两条 BCA 新 response 均要求并通过 `appliedResponseId
 核查边界：本次全量验证保存的规范/原始返回与 task、当前资料、history 的一致性，并检查原 HTTP 留存/来源链；没有重新实现 scraper 去逐字段独立解析全部 HTML。permissions 的 RPC 请求 body 未被 ledger 保存，因此其 App 身份证据来自 task/response 绑定及声明来源，不能声称从不存在的请求体独立读出了 App ID。
 
 同一快照中 Apple 补充仍 **5,294 succeeded、6 failed、1 running、2,560 queued**；两商店评论首批 **2,024 queued**。因此这次 Google Play 补充阶段通过不构成第二项全部完成或 #11 整体验收，后续 Apple 和全部可继续评论页仍须执行并独立核对。
+
+## 第二项阶段结果：Apple 七类补充全量核查
+
+CEO 确认 phase 2 全部进入终态后，Alex 于 **2026-09-06T19:53:31.286Z～19:53:39.774Z** 执行独立只读事务，全量检查 **1,123 条 Apple 市场记录 × 7 类 = 7,861 项**，异常计数 **0**。按 `store + externalId` 去除跨国家重复后为 **873 个不同 Apple 商店 ID**；这与 1,123 条 country/store/externalId 市场记录是不同分母，不合并市场记录或推断不同产品的共同主体。
+
+脚本 `.artifacts/alex-apple-supplement-audit.mjs`，聚合 `data/batches/finance-2026-09-07-alex-apple-supplements.json`。未再次全量审计已经验收的 Google 数据；0 生产写入、0 真实源请求。本节交 PM 完成 Apple 补充阶段及新增来源限制验收，评论采集仍继续。
+
+| 类别 | available | 成功空返回 | unsupported | failed |
+| --- | ---: | ---: | ---: | ---: |
+| permissions | 0 | 0 | 1,123 | 0 |
+| dataSafety | 0 | 0 | 1,123 | 0 |
+| privacy | 1,023 | 96 | 0 | 4 |
+| versionHistory | 1,033 | 86 | 0 | 4 |
+| inAppPurchases | 128 | 991 | 0 | 4 |
+| ratings | 1,123 | 0 | 0 | 0 |
+| developer | 1,123 | 0 | 0 | 0 |
+| 合计 | 4,430 | 1,173 | 2,246 | 12 |
+
+| 国家 | 市场记录 | available | 空返回 | unsupported | failed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 泰国 | 167 | 685 | 150 | 334 | 0 |
+| 墨西哥 | 258 | 963 | 324 | 516 | 3 |
+| 菲律宾 | 196 | 789 | 185 | 392 | 6 |
+| 巴基斯坦 | 155 | 636 | 136 | 310 | 3 |
+| 印尼 | 141 | 585 | 120 | 282 | 0 |
+| 阿根廷 | 206 | 772 | 258 | 412 | 0 |
+| 合计 | 1,123 | 4,430 | 1,173 | 2,246 | 12 |
+
+所有 7,861 项均有且仅有对应 App 的七类任务。7,849 项 succeeded 的完整 response 与持久 response ledger 全文一致，并逐项核对当前 enrichments/最新 history 的状态、data/raw、source、国家/语言、note 与观察时间；失败与 unsupported 没有伪造新成功时间或空数据。核对 5,657 条相关 HTTP 的身份/来源/时间及原文存在性，其中包括 54 条失败尝试 HTTP。runtime 5 后 2,974 项新成功结果的 appliedResponseId 均正确，早期任务未被强加后续版本字段。
+
+Apple 成功与失败资料的请求国家均对应各店面；HTML 和 ratings 接口没有独立语言参数，requestLanguage 保持 null，developer lookup 的实际请求明确 `lang=en_us`、`limit=200`，不将它当用户或评论者语言。版本/隐私/IAP 的空结果仅说明此接口本轮返回为空，不推断商店绝无资料。developer 的公开 lookup 上限也不构成开发者全部产品的证明。
+
+原 245 条 Apple 基线身份、classification/source/manualOverride 和 firstSeen 逐字段一致；之前已接受的六条失败任务没有新增尝试或改写结束时间。
+
+### 十二项 Apple 来源失败的最终范围
+
+| App / 商店 ID | 市场 | 任务（privacy / versionHistory / IAP） | 每项累计尝试 | 每项终态时间 UTC |
+| --- | --- | --- | ---: | --- |
+| 1060 / 871608181 | PH | 15128 / 15129 / 15130 | 6 | 19:15:20.478 / 19:15:22.415 / 19:15:24.324 |
+| 1172 / 1089271220 | PK | 16024 / 16025 / 16026 | 6 | 19:15:26.273 / 19:15:28.171 / 19:15:30.082 |
+| 1638 / 1089271220 | MX | 19752 / 19753 / 19754 | 3 | 19:33:16.278 / 19:33:18.214 / 19:33:20.457 |
+| 1819 / 1089271220 | PH | 21200 / 21201 / 21202 | 3 | 19:43:12.148 / 19:43:14.172 / 19:43:16.187 |
+
+失败范围是 **12 项操作、4 条市场 App 记录、2 个不同 Apple 商店 ID**，不是四个不同商店产品；同一个 1089271220 分别在 PK、MX、PH 留有独立任务和国别证据。旧六项各 6 次（两轮各 3），新增六项各 3 次（单轮预算）均已终止 failed，无排队的恢复步骤。共 54 条 attempt、54 条失败 history 与相应 HTTP 逐次绑定；诊断增强后的 **36 条**实际失败 HTTP 均含 `redirect count exceeded`，增强前 18 条原始 `fetch failed` 仍保留。
+
+三个 CEO 官方来源探测文件按各国限定使用：
+
+- `apple-url-probe.json`：PH 871608181 和 PK 1089271220，原 SHA256 与既有 Alex 审计完全一致。
+- `apple-mx-url-probe.json`：MX 1089271220，19:33:04.744Z 官方 canonical URL 的 301 Location 指向自身。
+- `apple-ph-loans-url-probe.json`：PH 1089271220，19:43:21.551Z 官方 canonical URL 的 301 Location 指向自身。
+
+各文件完整 SHA256、来源 URL 和事件时间留于本地聚合证据。探测由 CEO 执行，Alex 读取已存证据，不声称再次联网复现；诊断结果没有作为成功响应入库。新 MX/PH 的三次实际尝试已具有底层原因及各国自循环证据，因此不为凑次数机械重试到六次。
+
+这 12 项原本没有可保留的成功 HTML 资料，当前 data/raw/lastSuccessAt 如实为 null，失败未改成 empty/unsupported/succeeded；四条 App 的详情、ratings 和 developer 等其余可用项保持独立成功。源限制仅覆盖所列市场、类型和本轮时间，不表示下架或永久不可取得。新六项的限定终止接受仍由 PM 确认。
+
+### 补充阶段与剩余工作
+
+结合此前已验收的 Google 阶段，全部 **2,024 × 7 = 14,168 项**补充任务已处理，任务状态为 **14,156 succeeded + 12 failed**，没有未尝试或待续的补充项。资料口径为 **7,132 available（含 BCA 两项部分目录）、1,174 空返回、5,850 unsupported、12 来源失败**；部分目录不计完整目录成功。
+
+本次 Apple 审计快照中评论已成功 53 页（GP 41、Apple 12），仍有 2,018 条 queued 和 1 条 running 评论任务。这里只引用状态快照，没有运行最终评论审计，不以页数代表商店全部评论；全部可继续评论流和 #11 最终验收仍须继续。
