@@ -2,8 +2,8 @@
 
 - 关联：[缺陷 #16](https://github.com/zequnjiang/appeye/issues/16)、[完整采集 #11](https://github.com/zequnjiang/appeye/issues/11)、[PM 验收标准](../requirements/REVIEW-SOURCE-VALIDATION.md)、[CTO 自检交接](REVIEW-SOURCE-VALIDATION-CTO.md)。
 - 测试日期：2026-09-07（北京时间）；下面的审计时间均为 UTC。
-- 工程基线：`b61242d` 加本次 `review-source-validation.ts`、评论 provider、`saxes@6.0.0` 及锁文件调整；最终提交由 CEO 统一记录。Alex 独占 `tests/review-source-validation.test.ts` 与本报告，未修改业务实现、真实数据库或 Git。
-- 当前结论：12 项专项回归及完整工程 132 项测试、前后端类型检查与生产构建通过；部署后的实际新页验证在下文另行记录。此缺陷来自静态审阅，目前历史审计没有发现本批次错误页被当成空评论，不能表述为已发生数据丢失。#11 评论全集仍在运行。
+- 工程及实际部署基线：`522d86e`（此前 `b61242d` 加本次 `review-source-validation.ts`、评论 provider、`saxes@6.0.0` 及锁文件调整）。Alex 独占 `tests/review-source-validation.test.ts` 与本报告，未修改业务实现、真实数据库或 Git。
+- 当前结论：12 项专项回归及完整工程 132 项测试、前后端类型检查与生产构建通过；runtime-6 旧数据全量对照与部署后双店新页验证通过，交 PM 作局部验收。此缺陷来自静态审阅，目前历史审计没有发现本批次错误页被当成空评论，不能表述为已发生数据丢失。#11 评论全集仍在运行。
 
 ## 确定性回归
 
@@ -47,4 +47,18 @@
 
 独立执行完整 `npm run check`：**132 / 132 测试通过**，前后端 TypeScript 检查、Vite 生产构建、服务端编译及迁移文件复制均通过（退出码 0）。部署前后只读对照脚本为 `.artifacts/alex-review-runtime-checkpoint.mjs`，记录旧成功任务与 HTTP 的完整行哈希、评论身份 / 获取时间 / 完整行哈希及 seen 集合。新页允许真实更新旧评论，但更新必须逐字段对应新的持久 response 与实际获取时间；不能要求当前记录永远停留在旧观测。
 
-截至本版，尚未核验 runtime-6 的真实新增页；不以 fixture 通过代替部署验证，也不据此关闭 #16 或 #11。最终工程结果和部署证据由 Alex 追加，再交 PM 验收。
+CEO 于 `20:13:15Z` 干净停止 runtime-5，部署 `522d86e`；runtime-6 记录为 `data/batches/finance-2026-09-07-runtime-6.json`。该记录的实际命令只有原 batch / serve / delay 参数，没有成功重排或 retry flag。以下由 Alex 独立只读验证，未发商店请求：
+
+| 核查 | 一致快照时间（UTC） | 分母 / 结果 |
+| --- | --- | --- |
+| 部署前后历史对照 | `20:13:56.722–20:14:01.584Z`；CEO 执行 capture 的基线起点为 `20:13:18.760Z` | 2,220 个旧成功任务与 2,220 份旧 HTTP 完整行哈希全等；144,551 条旧评论身份 / 字段 / raw / fetchedAt 完全不变；144,414 个旧 seen 身份全部保留；0 异常 |
+| 实际运行文件 | `20:14:54.357Z` | runtime-6 记录的全部 10 个文件 SHA256 与磁盘文件一致 |
+| 部署后新增 GP 页 | `20:14:54.357–20:14:54.683Z` | 67 页、9,804 条评论；65 个继续、2 个无 next token 正常终止。原 HTTP 的 UsvDTd 帧独立解析、错误码 / ID / 数量 / cursor 与 response 一致，0 异常 |
+| 部署后新增 Apple 页 | 同上 | 57 页、1,324 条评论；31 个继续、26 个合法空 feed 终止。原 HTTP 严格 XML / Atom 根 / ID / 数量及新 source 精确大小写一致，0 异常 |
+| 新页存储与接续 | 同上 | 全 124 页的 HTTP / 成功 attempt / 持久 response 及来源时间可追溯；11,128 条规范化评论字段 / raw / 当前获取时间一致；继续页均有正确后继 checkpoint，0 异常 |
+
+此次部署后的 GP 分母中没有新的空页，不能声称实测了“新 GP 空页”；合法 GP null / 空 / 空加 token 由安装 SDK 的确定性回归验证，部署后的合法空页实证来自 26 个 Apple feed。部署后没有来源校验错误实例，也没有制造真实错误流量来测试失败。错误处理与有限重试结果来自上方明确分开的内存测试。
+
+本地证据：`data/batches/finance-2026-09-07-alex-runtime-6-before.json` 及其 `reviews.jsonl` / `seen.jsonl`，`finance-2026-09-07-alex-runtime-6-after.json`，`finance-2026-09-07-alex-runtime-6-new-sources.json`。对照脚本写出身份与哈希，不复制正文。新来源脚本为 `.artifacts/alex-review-runtime-6-source.py`。
+
+本项工程与实际部署 QA 通过，交 PM 局部验收。评论仍有待处理分页；最终验收将重新核查届时全部 GP 来源帧和全部 Apple feed，不能沿用本报告 901 / 725 的历史时点分母代表最终所有页。#11 整体仍未验收。
