@@ -1,6 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import type { Store } from './db.js';
 import { classifyLoan } from './loan-identification.js';
+import { normalizeDeveloperContinuation } from './developer-continuation.js';
 import { enrichmentContext } from './providers.js';
 import {
   financeCollections,
@@ -296,7 +297,7 @@ export function createFullScanRunner(options: {
   }
   function retryFailed() {
     store.run(
-      "UPDATE full_scan_tasks SET status='queued',attempts=0,next_run_at=?,error=NULL WHERE batch_id=? AND status='failed'",
+      "UPDATE full_scan_tasks SET status='queued',attempts=0,next_run_at=?,error=NULL,payload=json_remove(payload,'$.recoveryAttemptBase') WHERE batch_id=? AND status='failed'",
       time(),
       batchId,
     );
@@ -305,6 +306,75 @@ export function createFullScanRunner(options: {
       time(),
       batchId,
     );
+  }
+  function retryDeveloperWarnings(): number {
+    const tasks = store
+      .all(
+        "SELECT * FROM full_scan_tasks WHERE batch_id=? AND store='google-play' AND kind='enrich' AND json_extract(payload,'$.kind')='developer' AND status='succeeded' AND stop_reason='developer-degraded'",
+        batchId,
+      )
+      .filter((task) => {
+        const response = task.response ? JSON.parse(task.response) : null;
+        if (
+          !Array.isArray(response?.raw?.warnings) ||
+          !response.raw.warnings.some(
+            (warning: any) =>
+              warning.context === 'developer' && warning.reason === 'cluster-page-parse',
+          )
+        )
+          return false;
+        // Only the final continuation can explain the parse stop. An earlier compact page
+        // does not prove that a later unknown layout is recoverable with this adapter.
+        const record = store.one(
+          "SELECT status,body FROM full_scan_http WHERE task_id=? AND url LIKE '%rpcids=qnKhOb%' ORDER BY id DESC LIMIT 1",
+          task.id,
+        );
+        return (
+          record?.status === 200 &&
+          typeof record.body === 'string' &&
+          !!normalizeDeveloperContinuation(record.body).adaptation
+        );
+      });
+    store.transaction(() => {
+      for (const task of tasks) {
+        if (
+          task.response &&
+          !store.one(
+            'SELECT id FROM full_scan_responses WHERE task_id=? AND response=? LIMIT 1',
+            task.id,
+            task.response,
+          )
+        ) {
+          const attempt = store.one(
+            'SELECT id FROM full_scan_attempts WHERE task_id=? ORDER BY id DESC LIMIT 1',
+            task.id,
+          );
+          if (!attempt)
+            throw new Error(`Developer task ${task.id} has no historical attempt ledger`);
+          store.run(
+            'INSERT INTO full_scan_responses(task_id,attempt_id,observed_at,response) VALUES (?,?,?,?)',
+            task.id,
+            attempt.id,
+            task.response_at,
+            task.response,
+          );
+        }
+        const payload = { ...JSON.parse(task.payload), recoveryAttemptBase: task.attempts };
+        store.run(
+          "UPDATE full_scan_tasks SET status='queued',next_run_at=?,finished_at=NULL,response=NULL,response_at=NULL,result=NULL,error=NULL,payload=? WHERE id=?",
+          time(),
+          json(payload),
+          task.id,
+        );
+      }
+      if (tasks.length)
+        store.run(
+          "UPDATE full_scan_runs SET status='running',updated_at=? WHERE id=?",
+          time(),
+          batchId,
+        );
+    });
+    return tasks.length;
   }
   function recordHttp(record: ScanTransportRecord) {
     const inserted = store.run(
@@ -815,7 +885,8 @@ export function createFullScanRunner(options: {
           'UPDATE full_scan_tasks SET response=NULL,response_at=NULL,result=NULL WHERE id=?',
           task.id,
         );
-      const retry = stopping || task.attempts + 1 < config.maxAttempts;
+      const recoveryBase = Number(JSON.parse(task.payload).recoveryAttemptBase ?? 0);
+      const retry = stopping || task.attempts - recoveryBase + 1 < config.maxAttempts;
       if (task.kind === 'enrich' && task.app_id && !stopping) {
         const app = store.getApp(task.app_id)!;
         const kind = JSON.parse(task.payload).kind as EnrichmentKind;
@@ -842,7 +913,8 @@ export function createFullScanRunner(options: {
         retry ? 'queued' : 'failed',
         message,
         new Date(
-          Date.now() + (stopping ? 0 : config.retryDelayMs * 2 ** task.attempts),
+          Date.now() +
+            (stopping ? 0 : config.retryDelayMs * 2 ** Math.max(0, task.attempts - recoveryBase)),
         ).toISOString(),
         time(),
         task.id,
@@ -868,6 +940,7 @@ export function createFullScanRunner(options: {
     seed,
     recover,
     retryFailed,
+    retryDeveloperWarnings,
     recordHttp,
     summary,
     runOnce,

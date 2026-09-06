@@ -79,7 +79,7 @@ SQLite WAL + 明确 SQL 迁移，规范字段和原始 JSON 并存。表名：`c
 FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --serve
 ```
 
-同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。批次结束后，用 `NODE_ENV=production npm start` 恢复普通服务。
+同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项，`--retry-warnings` 仅重试原始响应可被已验证布局适配恢复的 Google Play 开发者目录告警，保留原尝试和数据历史。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。批次结束后，用 `NODE_ENV=production npm start` 恢复普通服务。
 
 ```bash
 npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --status

@@ -1,6 +1,7 @@
 import googlePlay from '@mradex77/google-play-scraper';
 import * as apple from '@perttu/app-store-scraper';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { normalizeDeveloperContinuation } from './developer-continuation.js';
 import {
   createProviders,
   normalizeApp,
@@ -326,6 +327,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           });
         if (!input.developerId) throw new Error('应用详情缺少开发者 ID，未发起开发者目录请求');
         const warnings: unknown[] = [];
+        const compatibility: unknown[] = [];
         let devId = input.developerId;
         if (store === 'google-play') {
           try {
@@ -334,7 +336,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
             /* retain raw ID */
           }
         }
-        const developerFetch: typeof fetch = (url, init) => {
+        const developerFetch: typeof fetch = async (url, init) => {
           const originalRequest = url instanceof Request ? url : undefined;
           const expanded = new URL(originalRequest?.url ?? String(url));
           if (
@@ -343,10 +345,36 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
             expanded.pathname === '/lookup'
           )
             expanded.searchParams.set('limit', '200');
-          return fetcher(
+          const response = await fetcher(
             originalRequest ? new Request(expanded, originalRequest) : expanded.toString(),
             init,
           );
+          if (
+            store === 'google-play' &&
+            response.ok &&
+            expanded.hostname === 'play.google.com' &&
+            expanded.pathname.endsWith('/batchexecute') &&
+            expanded.searchParams.get('rpcids') === 'qnKhOb'
+          ) {
+            const originalBody = await response.clone().text();
+            const normalized = normalizeDeveloperContinuation(originalBody);
+            if (normalized.adaptation) {
+              const metadata = transportSources.get(response);
+              compatibility.push({
+                ...normalized.adaptation,
+                sourceHttpId: metadata?.httpId ?? null,
+                sourceFetchedAt: metadata?.record.fetchedAt ?? null,
+                originalHttpPreserved: true,
+              });
+              // The persisted response remains Google's original bytes; only the SDK input is adapted.
+              return new Response(normalized.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: { 'content-type': 'application/json; charset=utf-8' },
+              });
+            }
+          }
+          return response;
         };
         const raw = await client.developer({
           ...context(input),
@@ -357,7 +385,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           onIntegrityEvent: (event: unknown) => warnings.push(event),
           requestOptions:
             store === 'google-play'
-              ? requestOptions(store, input.signal)
+              ? { timeoutMs, retries: 0, signal: input.signal, fetchImpl: developerFetch }
               : { timeout: timeoutMs, retries: 0, signal: input.signal, fetch: developerFetch },
         });
         const provenance = enrichmentContext(store, input);
@@ -366,8 +394,8 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           ...(store === 'app-store' ? { source: `${provenance.source}&limit=200&lang=en_us` } : {}),
           status: hasEnrichmentData(raw) ? 'available' : 'empty',
           data: raw,
-          raw: { data: raw, warnings },
-          note: `${provenance.note} ${store === 'google-play' ? '目录沿库内部公开游标读取至自然结束；无本地20项截断，异常/令牌循环会记录 warnings。' : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}`,
+          raw: { data: raw, warnings, compatibility },
+          note: `${provenance.note} ${store === 'google-play' ? '目录沿库内部公开游标读取至自然结束；无本地20项截断，异常/令牌循环会记录 warnings。' : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}${compatibility.length ? ` ${compatibility.length} 次已校验的续页布局适配；真实原HTTP保留，转换仅作为库的解析输入。` : ''}`,
         };
       },
       async list(input) {

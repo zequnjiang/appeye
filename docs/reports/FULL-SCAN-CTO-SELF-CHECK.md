@@ -71,3 +71,21 @@ CTO 交 Alex 执行最终回归与 CLI 状态/恢复验证；CEO 负责真实批
 追加验证完成：CTO 对最新服务端和 CLI 严格类型检查通过；Alex 独立最终 `npm run check` **92/92**、类型检查及生产构建通过，包含 23 条 full-scan 和 8 条 bulk 回归。批量测试覆盖逐 ID 原始未知字段/seller/公共 HTTP 引用、四种上下文隔离、50 ID 上限、重复 ID/缺 ID/缺图/503/坏 JSON 回退、取消、fixture 不触真实网络、逐应用独立 ledger 与原始观测时间，以及 queued peer 的批次/商店/国家/语言筛选。三项追加评论恢复缺陷亦已回归通过。
 
 CEO 在记录 runtime-2 代码 SHA256 后优雅停止旧 CLI，并以同一批次标识受控恢复、启用批量路径；本次优化未新建第二个运行批次，没有由 CTO 操作真实数据库或重启生产进程。追加工程检查已完成，真实数据采集仍在继续，最终覆盖与错误结果由运营审计报告和 PM 验收确认。
+
+## Google Play 开发者续页布局修复（#13）
+
+2026-09-07，真实批次中的 task 602（阿根廷 Google Play 开发者目录）保留了初始 20 项和 `developer-degraded` 告警。只读调查确认：HTTP 2769 的初始页面和 HTTP 2770 的续页响应都已完整存入数据库；问题发生在指定维护库的解析阶段，并非原 HTTP 丢失。续页的 13 项位于紧凑布局 `[0][0][0]`，而库的开发者解析器仅接受旧布局 `[0][6][0]`，因此报 `cluster-page-parse`。此新增批次缺陷单独跟踪于 [#13](https://github.com/zequnjiang/appeye/issues/13)，不改变此前第一项产品需求的验收结论。
+
+修复限定在 `server/developer-continuation.ts` 和 full-scan provider 边界：仅对已核对 RPC、容器、应用身份、详情链接、必要字段和 token 形状的紧凑布局创建内存兼容输入。原始 HTTP 在转换前落库，字节不变；返回资料中的 `raw.compatibility` 记录转换路径、条数、公共原 HTTP ID 与该响应真实 fetchedAt。旧布局完全不变，未知/坏结构继续暴露原解析告警；空列表仍带有效 token 时也不转换成假终止。未修改 node_modules、官方返回原文或已有生产记录。
+
+用真实已存的两个 HTTP 响应进行完全离线重放：维护库经过该边界后返回 **33 项、33 个唯一应用 ID、0 告警**；原有 20 项的 JSON 结果完全一致，两个原 HTTP body 完全一致。CTO 与 Alex 均以只读数据库及注入 fetch 验证，**没有新增真实网络请求，没有写入真实数据库**。这证明已保存响应可以恢复完整解析，不代表运行中的旧进程已经完成重采。
+
+新增显式 `--retry-warnings` / `runner.retryDeveloperWarnings()`：只选择同一 batch、Google Play、已成功但 `developer-degraded` 的开发者任务，且告警为开发者续页解析错误，最后一条续页原 HTTP 必须能被该补丁识别。仅早页可适配而末页仍未知的任务不会被误重排；评论循环、搜索告警、其他批次、终止失败和未知开发者布局均不受影响。旧完整响应、原 HTTP、attempt 和 enrichment history 全部保留；新尝试追加历史并采用独立的有限重试预算，失败仍显示之前成功的目录和原采集时间。此入口不会把旧尝试改写成成功，也不会将告警直接清零。
+
+受控停止旧进程、记录新代码版本并恢复同一批次后，CEO 可执行：
+
+```sh
+FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --serve --delay-ms 500 --retry-warnings
+```
+
+CTO 自检包括完整 `npm run check`（99/99、全工程类型与构建通过）、CLI 单独严格类型检查，以及原响应离线重放。Alex 独立回归覆盖两种实际 SDK 布局、未知/坏结构与空页活 token、33 项完整解析、原文和来源引用、重试范围、历史保留与有限预算；最后续页筛选加固后的正式结果见 Alex 针对 #13 的独立报告。源码修复交接后由 CEO 安排 runtime-3 启用和实际任务复采，本文不将尚未执行的真实恢复写为完成。
