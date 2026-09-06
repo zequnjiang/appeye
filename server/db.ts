@@ -692,7 +692,12 @@ export class Store {
       total: this.one(`SELECT COUNT(*) n ${from}`, ...params)!.n,
     };
   }
-  saveReviews(appId: number, reviews: NormalizedReview[], language?: string): number {
+  saveReviews(
+    appId: number,
+    reviews: NormalizedReview[],
+    language?: string,
+    fetchedAt = now(),
+  ): number {
     const app = this.getApp(appId);
     if (!app) throw new Error('App not found');
     const country = this.getCountry(app.country)!;
@@ -712,7 +717,7 @@ export class Store {
           review.version ?? null,
           review.reviewedAt ?? null,
           review.replyText ?? null,
-          now(),
+          fetchedAt,
           JSON.stringify(review.raw ?? review),
         );
         inserted += Number(r.changes);
