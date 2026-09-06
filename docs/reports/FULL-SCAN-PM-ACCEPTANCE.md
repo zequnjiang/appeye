@@ -54,6 +54,8 @@ Alex全量比较原474的所有基线字段和国家language/keywords/enabled无
 
 ## 阶段放行边界
 
+第二项执行中的局部结论另有正式报告：[#13续页布局修复](DEVELOPER-CONTINUATION-PM.md)与[#14目录路由修复](DEVELOPER-ROUTE-PM.md)通过；[六项Apple来源限制](APPLE-SOURCE-LIMIT-PM.md)保留failed；[两项BCA部分目录来源限制及#15](DEVELOPER-SOURCE-ERROR-PM.md)通过限定验收，BCA仍保留developer-degraded。后者工程基线baa6e98、Alex完整检查120/120，PM已独立核实际单轮恢复与新旧响应。局部限制不扩张到未审计的其他市场或未完成评论，整体仍不放行。
+
 允许CEO发布第一项验收通过的GitHub阶段记录，并继续当前批次第二项。第一项全量审计通过，不等于“所有入库App完整采集完毕”，不允许据此删除待处理项、缩小既定范围、解除人工排除或将评论本地运行切片称为上游限制。
 
 最终验收必须收到CEO执行结束/恢复报告与Alex实际全集核查：2,024主库App的7类/全部可分页评论结果和已验收详情保持；没有queued/running/deferred、未尝试或尚可恢复却未处理的页；异常和真正上游限制逐项可证；原数据与分类保持，最终审计及运行设置恢复完成。届时PM另作正式运营结论；本报告当前结论保持**第一项通过，第二项继续，整体未完成**。

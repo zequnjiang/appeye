@@ -119,3 +119,15 @@ CTO 已做严格类型检查及完全注入的传输测试：`fetch failed` 保�
 仅使用上述原响应进行离线重放，输出的 10 项 JSON 与当前已存部分资料逐字段相同，原 HTTP body 不变；维护 SDK 构造的续页 token 与原初始页面指定 token 逐字符相同，国家/语言均为 id/id，未发现取错 token 的证据。实际运行 ledger 没有保存请求 body，因此该比较明确属于当前安装 SDK 的离线请求构造验证，不能冒充实际请求体留存。此次调查 0 新真实网络、0 真实数据库写入、0 源码修改。
 
 只含引用、时间、哈希、计数、类型、代码及验证结论的聚合证据保存在忽略提交的 `data/batches/finance-2026-09-07-developer-rpc-source-audit.json`；没有导出 token 或原响应正文至文档。当前状态保留部分成功资料及失败续页原文，继续标记需复核；#13 的限定重试入口正确排除本类错误。CEO 将先完成本轮全部补充采集、核对同类范围，再以唯一写入进程控制一次有证据的有限重试，追加新尝试而不修改旧记录。该问题尚未被新代码解决，也没有作为 unsupported 或空成功跳过。
+
+## runtime-5 工程交接：定向恢复、响应幂等与索引
+
+**source5 定向恢复（#11，FS-DR-01~07）。** 新增 `--retry-developer-source-errors` 和 `runner.retryDeveloperSourceErrors()`，默认不执行。它仅选择本 batch 的 Google developer `succeeded + developer-degraded` 任务，要求现有解析告警、最后一次官方 `qnKhOb` HTTP 200、null payload、明确 `PlayDataError` code 5，并核对国家/冻结语言。未知布局、其他错误码、普通成功、其他类型、其他 batch 和不一致来源均不重排；原 `--retry-warnings` 范围不变。
+
+恢复复用原历史保护事务，payload 保存 reason、round=1、旧 sourceHttpId、previousResponseAt、queuedAt 及 recoveryAttemptBase。重复开关和中断恢复沿用同一轮，不自动开启无限新轮。旧 response/HTTP/attempt/enrichment history 和累计序号不修改；原响应缓存先归档，再重新取得初页及其新游标。再次返回部分目录和 source5 时仍保存 `succeeded + developer-degraded`，一轮到此结束，不能计入完整目录成功；只有网络异常使用现有最多三次新预算，最终失败保留旧部分资料及原成功时间。无告警返回则按原正常流程保存新资料。目录说明改为“沿公开游标尝试续页”，不再在有告警时声称自然读完。README 与 CLI help 已同步说明该入口不解决上游错误或保证完整性。
+
+**同毫秒响应幂等（#15）。** CTO 回归发现既有 `app/kind/fetched_at` 判重会把同毫秒的失败后成功或两个真实部分响应误当作同一次重放；这是离线发现，没有已知线上数据损失。[#15](https://github.com/zequnjiang/appeye/issues/15) 的修复以持久 `full_scan_responses.id` 作为响应身份，result.appliedResponseId 记录该响应已应用。Store.saveEnrichment 增加可选同步 onSaved hook，在其原有事务提交前写标记，history、最新资料和标记原子提交；没有嵌套 BEGIN 或复制另一套资料写入 SQL。不同真实响应即便时间和内容相同也分别追加历史；同一缓存响应重放保留原观测时间并只应用一次，旧四参数调用不受影响。
+
+**纯索引优化。** `ensureFullScanSchema` 仅新增 `full_scan_http_batch ON full_scan_http(batch_id)`，供现有按 batch 的 HTTP 计数使用。依据 Alex 的独立读查询测量：当前数据约 5ms，50,000 行合成样本约 11.65ms，索引后约 0.57ms；这些是本地观察，不作为线上性能保证。未新增计数器、改变状态查询频率、并发或任务调度。
+
+CTO 自检：完整 `npm run check` **118/118**、全工程类型/构建、CLI 单独严格类型通过；新增测试继续由 Alex 独立完善并以其最终报告为准。完全冻结时间的内存实测确认：同毫秒同内容的新恢复产生两条独立历史，原历史不变；已应用响应的中断重放不增加采集调用或历史；source5 再次返回只产生一次新正常任务执行并保留告警。真实原响应 7232/7236 仅以只读方式验证严格解析器可正判，0 真实请求、0 真实数据库写入。源码交 Alex 最终独立回归后，由 CEO 在 phase2 范围核对后安排 runtime-5 单轮真实恢复；该交接不预先接受 source5 为来源限制。

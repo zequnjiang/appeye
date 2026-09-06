@@ -147,7 +147,9 @@ Alex核对原474的身份、classification/source/override、firstSeen等所有�
 
 App1060（ph/App Store，871608181）的privacy、versionHistory、inAppPurchases因官方HTML地址不可获取而失败。CEO在`2026-09-06T19:10:10.187Z`起进行有界只读探测，PM已读本地`finance-2026-09-07-apple-url-probe.json`：无slug入口301到`myaccount%24`，该canonical地址再301到自身；官方lookup的`?uo=4`地址也自循环，解码slug及`?l=en`变体仍回到循环地址。探测没有取得HTML，且明确不是一次成功资料入库响应；可用详情/lookup没有因此作废。后续App1172（pk/App Store，1089271220）也出现这三类独立失败，与两条BCA目录告警继续单列待核查。
 
-上述Apple两条市场记录共6项现已通过[本轮来源限制PM验收](APPLE-SOURCE-LIMIT-PM.md)：runtime-4实际追加有限3次后，各任务累计1–6次均failed，新3次HTTP账本均含`redirect count exceeded`；旧记录保留，当前没有任何成功资料或成功时间。Alex于19:16:00.850Z、PM于19:17:20.659Z分别只读核对，官方PH和PK的canonical自循环证据匹配。结论是“6项已尝试、失败、本轮来源受限”，**不是6项取得成功或成功空**；任务保留failed，不要求篡改为成功。其余BCA告警仍未解决、补充/评论继续，整体未验收。循环是在具体时间和店面观测到，不证明永久下架、无隐私政策、无版本记录或无IAP。
+上述Apple两条市场记录共6项现已通过[本轮来源限制PM验收](APPLE-SOURCE-LIMIT-PM.md)：runtime-4实际追加有限3次后，各任务累计1–6次均failed，新3次HTTP账本均含`redirect count exceeded`；旧记录保留，当前没有任何成功资料或成功时间。Alex于19:16:00.850Z、PM于19:17:20.659Z分别只读核对，官方PH和PK的canonical自循环证据匹配。结论是“6项已尝试、失败、本轮来源受限”，**不是6项取得成功或成功空**；任务保留failed，不要求篡改为成功。循环是在具体时间和店面观测到，不证明永久下架、无隐私政策、无版本记录或无IAP。其他市场的同类失败仍需独立证据。
+
+runtime-5随后对两条BCA目录task16108/16116执行显式单轮恢复，各attempt2仍取得10项、1warning、续页HTTP200且qnKhOb/null/PlayDataError code5。新HTTP8836–8839、response17837/17838及其appliedResponseId、attempt和history已由Alex19:30:24.574Z与PM19:32:02.287Z分别核对；旧四HTTP/响应/历史保持，单轮marker仅这两项，六项Apple失败未重复。PM[接受两项为部分目录续页来源限制，并验收#15](DEVELOPER-SOURCE-ERROR-PM.md)。它们继续succeeded+developer-degraded，最终统计必须单列部分/告警，不能以succeeded状态称完整目录成功。#15修复及一轮恢复基线baa6e98通过120项工程回归，最终CI由CEO确认。其他补充、评论和整体#11继续执行。
 
 以下未完成项由实际执行和独立测试补齐，不能以预计值填入：
 
