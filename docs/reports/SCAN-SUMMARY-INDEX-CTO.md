@@ -2,7 +2,7 @@
 
 - 关联：[优化 #17](https://github.com/zequnjiang/appeye/issues/17)、[采集 #11](https://github.com/zequnjiang/appeye/issues/11)、[PM 验收标准](../requirements/SCAN-SUMMARY-INDEX.md)。
 - 日期：2026-09-07（北京时间）；测量时刻以下统一使用 UTC。
-- 当前阶段：CTO 自检完成、源码冻结并交 Alex 最终独立回归；待 CEO 受控部署。本文不声称已提升生产采集速度。
+- 当前阶段：CTO 自检完成，CEO 已受控部署 runtime7；实际冻结维护证据见文末，独立数据保持核查与 PM 结论另行记录。本文不将统计查询改善等同整体采集速度提升。
 
 ## 变更范围
 
@@ -71,3 +71,32 @@ CREATE INDEX IF NOT EXISTS full_scan_summary_covering ON full_scan_tasks(
 - 新增 `tests/scan-summary-index.test.ts` 4项已在上述完整自检通过：多 batch 全统计等值与三个查询覆盖计划；全部业务表在 DDL/重复初始化/文件重开后逐字段保持；真实 CLI status 对旧无索引库保持字节不变且不建索引；非法 JSON 明确失败且不改数据。Alex 最终独立检查及部署后证据另见其报告。
 
 部署前不得把隔离结果称为生产加速。真实 DDL、版本/检查点标识、单 writer 停止/恢复及部署后计划与耗时由 CEO 统一执行，Alex 核查旧证据保持后交 PM 验收。本项通过也不代表全部评论或 #11 完成。
+
+## Runtime7 实际维护与冻结对照
+
+本节只读取 CEO 已生成的维护证据文件，不新增生产测量。CEO 于 `2026-09-06T21:21:12.592Z` 干净停止 runtime6，确认 collector lock 不存在、WAL 为0，并在物理 capture 完成后顺序执行 ignored `.artifacts/runtime7-summary-index.ts` 的 `before`、`build`、`after`。工具从冻结源码中严格提取原11条 SQL，拒绝旧文件覆盖、collector lock 或运行中任务，并锁定源码与 SQL 的 SHA256。
+
+`before/after` 使用只读 DatabaseSync；`build` 作为唯一维护 writer，直接在 `BEGIN IMMEDIATE` 事务内调用 `ensureFullScanSchema({db})`，不调用 `createStore`、不启动 worker。完成后正常 checkpoint/close。工具曾在隔离夹具中处理 TypeScript7 不提供 AST API、SQLite 行 null prototype 导致深比较不兼容两个工具问题，改为严格原 SQL 提取及 JSON 规范化；三模式、拒覆盖和等值检查在隔离通过，真实维护没有这两类失败。
+
+实际证据文件均位于 ignored `data/batches/`：
+
+- `finance-2026-09-07-runtime7-summary-index-before.json`：`21:24:09.291Z–21:24:15.530Z`。
+- `finance-2026-09-07-runtime7-summary-index-build.json`：`21:24:20.990Z–21:24:21.537Z`。
+- `finance-2026-09-07-runtime7-summary-index-after.json`：`21:24:25.242Z–21:24:25.670Z`。
+
+构建前全表30,300任务、29,635个非 null result、0非法 JSON；实际 DDL **543.875ms**，新索引使用 **1,654,784 bytes**，checkpoint 为 `busy=0/log=0/checkpointed=0`。只新增目标索引，其余 schema 定义保持。
+
+在同一个停止状态，**全部11项原 SQL 的完整返回值深度比较完全相等**，包括各 kind/status 分组、原因分组、候选统计、653 pending、8,826成功评论页、857,498 seen、830,632 added/27,015 updated、19,811 HTTP 和 nextRunAt。此处对比没有跨越采集追加数据；after 文件记录 `statisticsDeepEqual=true`。
+
+| 实际冻结查询 | before 第1/2/3轮 ms | after 第1/2/3轮 ms |
+| --- | --- | --- |
+| counts | 4.732 / 21.323 / 5.801 | 1.224 / 1.230 / 1.201 |
+| reasons | 2,180.142 / 1,358.467 / 77.105 | 2.011 / 1.963 / 1.908 |
+| reviewWrites SUM | 1,283.392 / 293.101 / 253.637 | 0.388 / 0.412 / 0.395 |
+| **全部11条 SQL 合计** | **3,835.103 / 2,009.202 / 369.658** | **361.129 / 32.009 / 26.063** |
+
+after 的三个目标查询均实际使用 `COVERING INDEX full_scan_summary_covering`，reasons 保留临时分组 B-tree。各轮明显受缓存影响：例如 after 首轮未修改的 candidates/seen 分别约220/135ms，后续显著降低。因此完整保留首轮和后续轮次，不概括单一提升倍数，也不据此声称网络或整体页吞吐按同一比例改善。
+
+源码 commit 为 **`52cd7a8`**；维护文件中 server/full-scan.ts SHA256 为 `1b4a1d9de53028ddd7546ad5055f3b27d2e588316fa6f3f5b9398b172f098e28`，原SQL清单 SHA256 为 `e7b880d07e1827f8fa3486d7908f535f9dab1c0e513593c75aa02e3cbc09a2e3`。CEO 记录 runtime7 于 **`21:25:35.538Z`** 以 PID35101 恢复原 batch；本次没有改变来源、分页、限速、统计 SQL 或采集行为。
+
+旧20张业务表与26个旧索引的物理页保持，以及恢复后检查点/实际追加验证，归 [Alex 独立核查报告](SCAN-SUMMARY-INDEX-ALEX.md)；本文的 SQL 等值与性能证据不替代这些验证。#17 最终验收交 PM，#11 评论采集仍按原义务继续。
