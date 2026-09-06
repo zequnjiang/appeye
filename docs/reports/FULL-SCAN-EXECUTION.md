@@ -1,6 +1,6 @@
 # 六国财务应用扫描：阶段执行记录
 
-- 状态：**第一项发现、详情分析与信贷入库已通过PM验收；第二项完整补充资料与评论采集进行中，整体未完成，#11不得关闭。**
+- 状态：**第一项发现、详情分析与信贷入库已通过PM验收；第二项中Google Play七类补充阶段已通过，Apple补充资料与全部评论仍执行中，整体未完成，#11不得关闭。**
 - 批次：`finance-2026-09-07`，真实数据集`live`。
 - GitHub：[执行与验收 #11](https://github.com/zequnjiang/appeye/issues/11)、[草稿PR #12](https://github.com/zequnjiang/appeye/pull/12)，分支`codex/full-finance-scan`。
 - 需求：[FULL-SCAN-2026-09-07](../requirements/FULL-SCAN-2026-09-07.md)。实现与测试证据：[CTO自检](FULL-SCAN-CTO-SELF-CHECK.md)、[Alex阶段测试](FULL-SCAN-ALEX.md)。两份交接报告的阶段测试通过，不等于真实任务执行完成。
@@ -139,7 +139,40 @@ Alex核对原474的身份、classification/source/override、firstSeen等所有�
 
 第一项完成不等于第二项完成。PM`18:24:35.636Z`快照中补充485成功、1运行、13,682排队；评论2,024首流仍排队，本批次seen=0。全库留存27,003条既有评论不能当作本轮已采评论。当前全库快照2,618=基线594+本轮2,024，批次HTTP2,810条；其数量会随后续补充继续增加。
 
-## 7. 最终报告待补证据
+## 7. Google Play七类补充阶段验收
+
+**PM阶段结论：全部901条Google Play市场记录的七类补充已处理，6,307项覆盖和留存通过。** Alex于`2026-09-06T19:32:58.953Z`至`19:33:02.130Z`逐项核对，`data/batches/finance-2026-09-07-alex-google-supplements.json`的errorCount=0。PM于`19:37:29.898Z`至`19:37:40.628Z`独立只读事务复核全部6,307项任务绑定、种类唯一性、当前资料/最新history/持久response/成功attempt、完整data/raw、来源上下文及时间，差异0，聚合保存于`.artifacts/pm-google-supplements.json`。没有新增网络请求或生产库写入。
+
+| 七类补充 | 有数据且无部分告警 | 部分结果 | 空返回 | 明确不支持 | 合计 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| permissions | 900 | 0 | 1 | 0 | 901 |
+| dataSafety | 901 | 0 | 0 | 0 | 901 |
+| developer | 899 | 2 | 0 | 0 | 901 |
+| privacy | 0 | 0 | 0 | 901 | 901 |
+| versionHistory | 0 | 0 | 0 | 901 | 901 |
+| inAppPurchases | 0 | 0 | 0 | 901 | 901 |
+| ratings | 0 | 0 | 0 | 901 | 901 |
+| 合计 | **2,700** | **2** | **1** | **3,604** | **6,307** |
+
+| 国家 | GP市场记录 | 有数据且无部分告警 | 部分结果 | 空返回 | 明确不支持 | 七类合计 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 泰国 th | 132 | 396 | 0 | 0 | 528 | 924 |
+| 墨西哥 mx | 200 | 600 | 0 | 0 | 800 | 1,400 |
+| 菲律宾 ph | 142 | 426 | 0 | 0 | 568 | 994 |
+| 巴基斯坦 pk | 89 | 267 | 0 | 0 | 356 | 623 |
+| 印尼 id | 142 | 424 | 2 | 0 | 568 | 994 |
+| 阿根廷 ar | 196 | 587 | 0 | 1 | 784 | 1,372 |
+| 合计 | **901** | **2,700** | **2** | **1** | **3,604** | **6,307** |
+
+两项部分developer目录是已验收FS-DR来源限制的task16108/16116，各保留10项与1条告警，任务succeeded+developer-degraded不代表目录穷尽。以上2,700项指本次接口取得数据且无部分告警，不声称商店所有资料均可获得。unsupported是当前所用补充接口不支持相应操作，不等同于商店完全没有该信息；详情raw已有字段继续保留。dataSafety未发送国家参数，requestCountry如实为null，不能把同一接口结果解释为已证实国别差异。
+
+唯一empty为阿根廷App1436（Pago46: Socio46，`com.fortysixdegrees.storeagent`）的permissions任务18134，而非developer。原HTTP8137为200、102字节，实际获取`2026-09-06T19:21:37.241Z`、响应观测`19:21:37.357Z`；xdSrCf帧payload为字面`[]`、errorSlot=null，SHA-256为`36c29d3ce83b74ba03f920945d9c253715d1e6d9d567c1ba26d1ef4641b647d4`。CTO在同一已保存响应上以原ID/ar/es离线SDK重放仍为空，未发现另一可解析权限数组；PM独立读取并核对原HTTP、帧和哈希一致。此项接受为本次公开接口空清单，不能解释为该App实际没有权限。
+
+Alex全量核查2,736条当前attempt HTTP、2,748条历史HTTP及221处显式兼容/目录路由来源引用；PM另复核历史HTTP总数与上述空项原文。该核查验证保存内容一致及其任务/来源关联，没有声称从每份原HTML重新独立解析所有字段。permissions RPC请求body未保存，App身份由任务/响应绑定与声明source核对，不冒称能从不存在的请求body恢复ID。
+
+PM再次比较原474个App的所有基线字段和国家配置，差异0；主库仍2,024条市场记录，跨国按store/externalId去重1,664个商店App身份。PM快照中Apple补充为5,869 succeeded、9 failed、1 running、1,982 queued，共7,861；评论首流GP901、Apple1,123全部queued。这些是`19:37:40.628Z`前读取事务的阶段统计，后续持续变化。新增Apple失败没有在本节自动验收；已经取得的GP资料不解除Apple资料与全部评论的剩余采集义务。
+
+## 8. 最终报告待补证据
 
 第二项运行中发现的[开发者目录续页缺陷#13](https://github.com/zequnjiang/appeye/issues/13)已独立闭环：修复提交`7f6ea70`经99项工程回归、原响应离线重放和runtime-3真实恢复核查，task602目录从20项补齐33项，旧历史/原HTTP保留，新时间与来源关联准确；[PM缺陷验收](DEVELOPER-CONTINUATION-PM.md)允许最终CI通过后关闭该缺陷。此修复不改变第一项验收，也不代表第二项整体完成。
 

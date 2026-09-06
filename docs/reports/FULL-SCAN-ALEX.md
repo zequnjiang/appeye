@@ -142,3 +142,44 @@ CEO 另提供独立操作证据 `data/batches/finance-2026-09-07-api-smoke.json`
 ## 第二阶段解析修复补充
 
 真实开发者续页发现的兼容缺陷[#13](https://github.com/zequnjiang/appeye/issues/13)已另行完成工程验证，见[DEVELOPER-CONTINUATION-ALEX.md](DEVELOPER-CONTINUATION-ALEX.md)：当前完整99/99测试通过，保存的两条真实HTTP离线解析得到33项、原20项和原HTTP不变。Alex没有额外真实网络/生产写入；其后18:35:31.989Z只读确认task602真实attempt2为33项/0warnings，旧20项历史及原HTTP保留，仅1项显式重排，见专报。后续全体补充/评论覆盖仍需继续核查，不改变第一阶段已验收结论。
+
+## 第二项阶段结果：Google Play 七类补充全量核查
+
+**2026-09-06T19:32:58.953Z～19:33:02.130Z**，Alex 独立只读事务核对正式库中全部 **901 条 Google Play 市场记录 × 7 类 = 6,307 项**。这些对象全部完成本轮补充尝试，无遗漏、重复 kind 或剩余 GP 补充任务；BCA 两项仍为部分目录，不算完整目录成功。异常计数 **0**。本节仅验 Google Play 补充阶段，Apple 和评论尚未整体验收。
+
+脚本 `.artifacts/alex-google-supplement-audit.mjs`，聚合 `data/batches/finance-2026-09-07-alex-google-supplements.json`。采用逐任务迭代，不一次性加载全部大 HTTP body；0 真实网络、0 生产写入，没有重跑工程测试替代数据核查。
+
+| 类别 | available | 成功空返回 | unsupported | 其中部分结果 |
+| --- | ---: | ---: | ---: | ---: |
+| permissions | 900 | 1 | 0 | 0 |
+| dataSafety | 901 | 0 | 0 | 0 |
+| developer | 901 | 0 | 0 | 2 |
+| privacy | 0 | 0 | 901 | 0 |
+| versionHistory | 0 | 0 | 901 | 0 |
+| inAppPurchases | 0 | 0 | 901 | 0 |
+| ratings | 0 | 0 | 901 | 0 |
+| 合计 | 2,702 | 1 | 3,604 | 2 |
+
+available 的 2,702 项包含两条仍有警告的部分开发者目录，故可单列为 **2,700 项无部分警告的数据结果 + 2 项部分结果 + 1 项成功空 + 3,604 项明确不支持**，合计 6,307。unsupported 是所用补充接口的能力结果，不表示商店完全没有相关信息，也不等于成功抓到空数据；例如应用详情中已有的字段仍保留于详情 raw。permissions 的空返回仅表示本次接口为空，不能推断 APK 没有权限。
+
+| 国家 | 市场 App 记录 | available（含部分） | 空返回 | unsupported | 部分 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 泰国 | 132 | 396 | 0 | 528 | 0 |
+| 墨西哥 | 200 | 600 | 0 | 800 | 0 |
+| 菲律宾 | 142 | 426 | 0 | 568 | 0 |
+| 巴基斯坦 | 89 | 267 | 0 | 356 | 0 |
+| 印尼 | 142 | 426 | 0 | 568 | 2 |
+| 阿根廷 | 196 | 587 | 1 | 784 | 0 |
+| 合计 | 901 | 2,702 | 1 | 3,604 | 2 |
+
+逐项核查包括：task 与 App/store/country/externalId 的绑定、七类唯一覆盖；全部 6,307 项 task.response 与持久 response ledger 全文一致；当前 enrichments 和最新 history 的状态、完整 data/raw、source、requestCountry/requestLanguage、note、最近尝试/成功时间一致。unsupported 保留明确状态和说明，不产生本次成功时间或伪造数据。每项最新成功 attempt 与 response ID/时间可追溯。
+
+核对 2,736 条最新尝试 HTTP 的存在、状态、官方域名、冻结国家/语言及时间区间；GP 补充历史 HTTP 共 2,748 条，含先前失败与恢复证据。另验证 221 处兼容转换/已验证目录路由的显式源引用能指回同批对应 HTTP/详情任务。dataSafety 的国家参数确实未发送，requestCountry 为 null；其余接口沿各市场冻结语言，不能把数据安全资料误称国别独有披露。
+
+runtime 5 之后的两条 BCA 新 response 均要求并通过 `appliedResponseId` 对照；此前 6,305 项不被强行要求新增版本才有的字段。BCA task 16108/16116 各保留 10 项和 1 条 source-5 续页警告，`developer-degraded` 未被清除；一轮实际恢复、旧/新历史与源限制见 [DEVELOPER-SOURCE-ERROR-ALEX.md](./DEVELOPER-SOURCE-ERROR-ALEX.md)，PM 已另行接受其部分来源限制。
+
+原 474 条基线身份、人工/legacy 分类来源、override、firstSeen 逐字段仍一致；国家 language/keywords/enabled 一致，差异均为 0。主库仍为 2,024 条市场记录，本次补充阶段没有改变分母或人工分类。
+
+核查边界：本次全量验证保存的规范/原始返回与 task、当前资料、history 的一致性，并检查原 HTTP 留存/来源链；没有重新实现 scraper 去逐字段独立解析全部 HTML。permissions 的 RPC 请求 body 未被 ledger 保存，因此其 App 身份证据来自 task/response 绑定及声明来源，不能声称从不存在的请求体独立读出了 App ID。
+
+同一快照中 Apple 补充仍 **5,294 succeeded、6 failed、1 running、2,560 queued**；两商店评论首批 **2,024 queued**。因此这次 Google Play 补充阶段通过不构成第二项全部完成或 #11 整体验收，后续 Apple 和全部可继续评论页仍须执行并独立核对。
