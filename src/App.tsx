@@ -902,7 +902,7 @@ function AppsPage({
         )}
       </section>
       <p className="footnote">
-        自动发现的应用默认进入「待确认」。分类经人工确认后，才计入已确认信贷应用。
+        新应用具有强信贷证据时自动确认，其余保持待确认。人工和历史分类优先，可在详情中查看依据或启用自动分类。
       </p>
     </>
   );
@@ -1183,6 +1183,7 @@ function AppDetail({
       {tab === 'enrichments' && (
         <EnrichmentPanel
           app={app}
+          version={version}
           enrichments={data.enrichments || []}
           onCollect={() => onRefresh(id, 'enrich')}
         />
@@ -1204,12 +1205,14 @@ function AppDetail({
             endpoint={`/apps/${id}/discoveries`}
             listKey="discoveries"
             title="搜索发现原始记录"
+            version={version}
           />
           <p className="muted">规范化字段与原始商店返回数据用于追溯。最近的观测在前。</p>
           <ObservationHistory
             endpoint={`/apps/${id}/snapshots`}
             listKey="snapshots"
             title="全部详情快照"
+            version={version}
           />
         </section>
       )}
@@ -1667,7 +1670,9 @@ function SettingsPage({
         <div className="method-grid">
           <div>
             <h3>发现范围</h3>
-            <p>关键词搜索用于建立候选应用集合，不保证覆盖整个应用市场。信贷属性需要人工确认。</p>
+            <p>
+              关键词搜索用于建立候选应用集合，不保证覆盖整个应用市场。信贷属性按描述证据识别，支持人工覆盖；识别不等同合规认证。
+            </p>
           </div>
           <div>
             <h3>下载与安装</h3>
@@ -2036,7 +2041,7 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
         </div>
         <div className="workspace-tag">
           <span className="health-dot" />
-          信贷行业观察站<span>V0.1</span>
+          信贷行业观察站<span>V0.2</span>
         </div>
         <div className="nav-caption">工作空间</div>
         <nav>

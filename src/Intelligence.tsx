@@ -383,23 +383,59 @@ export function StoreInformation({ app, rawDetail }: { app: MarketApp; rawDetail
   );
 }
 
-function History({ id, kind }: { id: number; kind: string }) {
+function History({ id, kind, version }: { id: number; kind: string; version: number }) {
   return (
     <ObservationHistory
       endpoint={`/apps/${id}/enrichments/${kind}/history`}
       listKey="history"
       title="采集历史"
+      version={version}
     />
   );
+}
+
+function SupplementalSummary({ kind, data }: { kind: string; data: unknown }) {
+  if (!Array.isArray(data) || !data.length) return null;
+  if (kind === 'permissions')
+    return (
+      <ul className="permission-list">
+        {data.map((entry, i) => {
+          const value = typeof entry === 'string' ? entry : entry?.permission || entry?.name;
+          return value ? <li key={i}>{String(value)}</li> : null;
+        })}
+      </ul>
+    );
+  if (kind === 'versionHistory')
+    return (
+      <div className="version-history">
+        {data.map((entry, i) => {
+          if (!entry || typeof entry !== 'object') return null;
+          return (
+            <details key={i}>
+              <summary>
+                <strong>{String(entry.versionDisplay || entry.version || `版本 ${i + 1}`)}</strong>
+                <time>{String(entry.releaseDate || entry.date || '未提供日期')}</time>
+              </summary>
+              <p className="pre-wrap">
+                {String(entry.releaseNotes || entry.notes || '未提供更新说明')}
+              </p>
+            </details>
+          );
+        })}
+      </div>
+    );
+  return null;
 }
 export function ObservationHistory({
   endpoint,
   listKey,
   title,
+  version = 0,
 }: {
   endpoint: string;
   listKey: string;
   title: string;
+  version?: number;
 }) {
   const [offset, setOffset] = useState(0),
     [data, setData] = useState<Record<string, unknown> | null>(null),
@@ -418,7 +454,7 @@ export function ObservationHistory({
     return () => {
       active = false;
     };
-  }, [endpoint, offset]);
+  }, [endpoint, offset, version]);
   const rows =
     data && Array.isArray(data[listKey]) ? (data[listKey] as Record<string, unknown>[]) : [];
   return (
@@ -461,10 +497,12 @@ export function EnrichmentPanel({
   app,
   enrichments,
   onCollect,
+  version,
 }: {
   app: MarketApp;
   enrichments: Enrichment[];
   onCollect: () => void;
+  version: number;
 }) {
   const [history, setHistory] = useState('');
   return (
@@ -497,11 +535,31 @@ export function EnrichmentPanel({
             {item ? (
               <>
                 <div className="intelligence-meta">
-                  <span>数据来源 {item.source}</span>
+                  <span>成功数据来源 {item.lastSuccessAt ? item.source : '尚无成功资料'}</span>
                   <span>数据时间 {formatTime(item.fetchedAt)}</span>
                   <span>最近尝试 {formatTime(item.lastAttemptAt)}</span>
-                  <span>请求市场 {item.requestCountry?.toUpperCase() || '不提供国别参数'}</span>
-                  <span>请求语言 {item.requestLanguage || '未提供'}</span>
+                  <span>
+                    成功资料请求市场{' '}
+                    {item.lastSuccessAt
+                      ? item.requestCountry?.toUpperCase() ||
+                        (kind === 'dataSafety' && app.store === 'google-play'
+                          ? '此接口不提供国别参数'
+                          : '未记录')
+                      : '尚无成功资料'}
+                  </span>
+                  <span>
+                    成功资料请求语言{' '}
+                    {item.lastSuccessAt ? item.requestLanguage || '未验证或未提供' : '尚无成功资料'}
+                  </span>
+                  <span>最近尝试来源 {item.attemptSource}</span>
+                  <span>
+                    最近尝试市场{' '}
+                    {item.attemptRequestCountry?.toUpperCase() ||
+                      (kind === 'dataSafety' && app.store === 'google-play'
+                        ? '此接口不提供国别参数'
+                        : '未记录')}
+                  </span>
+                  <span>最近尝试语言 {item.attemptRequestLanguage || '未验证或未提供'}</span>
                 </div>
                 {item.note && <p className="mini-note">{item.note}</p>}
                 {item.error && (
@@ -515,6 +573,7 @@ export function EnrichmentPanel({
                 {item.status === 'unsupported' && (
                   <p className="muted">该商店或接口不提供此类资料。</p>
                 )}
+                <SupplementalSummary kind={kind} data={item.data} />
                 <FieldTree value={item.data} label="返回信息" />
                 <details>
                   <summary>原始响应与采集元数据</summary>
@@ -529,7 +588,7 @@ export function EnrichmentPanel({
                   </button>
                   <JsonDownload value={item} name={`appeye-${app.id}-${kind}`} />
                 </div>
-                {history === kind && <History id={app.id} kind={kind} />}
+                {history === kind && <History id={app.id} kind={kind} version={version} />}
               </>
             ) : (
               <p className="muted">

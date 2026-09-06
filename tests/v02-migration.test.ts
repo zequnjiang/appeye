@@ -16,9 +16,12 @@ test('V0.2 migration: V0.1 observations, identities, settings, manual classifica
       assert.equal(store.one('PRAGMA quick_check')?.quick_check, 'ok');
       assert.equal(store.one('SELECT value FROM metadata WHERE key=?', 'dataset')?.value, 'live');
       assert.equal(store.listApps().total, 3);
-      assert.deepEqual([7, 8, 9].map(id => store.getApp(id)?.classification), ['confirmed', 'excluded', 'candidate']);
-      assert.ok([7, 8, 9].every(id => store.getApp(id)?.manualOverride === true));
-      assert.ok([7, 8, 9].every(id => store.getApp(id)?.classificationSource === 'legacy'));
+      assert.deepEqual(
+        [7, 8, 9].map((id) => store.getApp(id)?.classification),
+        ['confirmed', 'excluded', 'candidate'],
+      );
+      assert.ok([7, 8, 9].every((id) => store.getApp(id)?.manualOverride === true));
+      assert.ok([7, 8, 9].every((id) => store.getApp(id)?.classificationSource === 'legacy'));
       const app = store.getApp(7)!;
       assert.equal(app.externalId, legacyNormalized.externalId);
       assert.equal(app.country, 'th');
@@ -30,7 +33,10 @@ test('V0.2 migration: V0.1 observations, identities, settings, manual classifica
       assert.equal(store.getApp(8)?.lastError, 'Legacy failure must remain visible');
       const snapshots = store.listSnapshots(7);
       assert.equal(snapshots.total, 2);
-      assert.deepEqual(snapshots.snapshots.map(item => item.id), [12, 11]);
+      assert.deepEqual(
+        snapshots.snapshots.map((item) => item.id),
+        [12, 11],
+      );
       assert.deepEqual(snapshots.snapshots[0].raw, legacyRaw);
       assert.equal(snapshots.snapshots[0].data.version, '1.1.0');
       const change = store.listChanges({ appId: 7 }).changes[0];
@@ -53,18 +59,34 @@ test('V0.2 migration: V0.1 observations, identities, settings, manual classifica
       assert.equal(store.getCountry('th')?.intervalHours, 48);
       assert.equal(store.getCountry('th')?.enabled, false);
       assert.deepEqual(store.getCountry('th')?.keywords, ['fixture loan']);
-      assert.equal(store.one('SELECT last_scheduled_at FROM schedule_state WHERE country=? AND store=?', 'th', 'google-play')?.last_scheduled_at, '2026-01-03T00:00:00.000Z');
+      assert.equal(
+        store.one(
+          'SELECT last_scheduled_at FROM schedule_state WHERE country=? AND store=?',
+          'th',
+          'google-play',
+        )?.last_scheduled_at,
+        '2026-01-03T00:00:00.000Z',
+      );
     };
     verify();
     store.backfillCurrentStoreData();
     store.backfillLoanAnalyses();
     assert.deepEqual(store.getApp(7)?.storeData, legacyRaw);
-    assert.deepEqual([7, 8, 9].map(id => store.getApp(id)?.classification), ['confirmed', 'excluded', 'candidate']);
+    assert.deepEqual(
+      [7, 8, 9].map((id) => store.getApp(id)?.classification),
+      ['confirmed', 'excluded', 'candidate'],
+    );
     assert.equal(store.backfillLoanAnalyses(), 0);
     const migrations = store.all('SELECT version FROM schema_migrations ORDER BY version');
     store.close();
     store = createStore(path);
     verify();
-    assert.deepEqual(store.all('SELECT version FROM schema_migrations ORDER BY version'), migrations);
-  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+    assert.deepEqual(
+      store.all('SELECT version FROM schema_migrations ORDER BY version'),
+      migrations,
+    );
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

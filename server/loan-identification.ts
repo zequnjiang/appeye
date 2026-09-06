@@ -108,7 +108,7 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
     );
   const hasLoan = loan.test(all),
     hasIntent = intent.test(desc) && (!noService.test(desc) || facilitator);
-  const isAccessory = accessory.test(all) && (noService.test(desc) || !hasIntent);
+  const isAccessory = accessory.test(all) && ((noService.test(desc) && !facilitator) || !hasIntent);
   const productType = isAccessory
     ? 'accessory'
     : /earned wage|salary advance|earned pay|adelanto de salario/iu.test(all)
@@ -153,7 +153,7 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
     if (m) add('context', 'loanContext', source, m[0], m.index, 10);
   }
   const im = intent.exec(desc);
-  if (im && hasLoan && !isAccessory)
+  if (im && hasLoan && hasIntent && !isAccessory)
     add('intent', 'serviceIntent', 'description', im[0], im.index, 20);
   const annualMaximumInterests: number[] = [];
   const descriptionClauses = clauses(desc);
@@ -165,43 +165,66 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
         text.lastIndexOf('%', m.index! - 1),
         text.lastIndexOf('％', m.index! - 1),
       );
-      const from = Math.max(0, m.index! - 90, previousPercent + 1),
-        to = Math.min(text.length, m.index! + m[0].length + 30);
-      const context = text.slice(from, to);
+      const from = Math.max(0, m.index! - 90, previousPercent + 1);
+      const tail = text
+        .slice(m.index! + m[0].length, m.index! + m[0].length + 30)
+        .split(/[,;\d]|\b(?:and|y|dan)\b|และ|اور/iu)[0];
+      const context = text.slice(from, m.index! + m[0].length) + tail;
       const prefix = text.slice(from, m.index!);
+      // Prefer a preceding label. A later APR label must not rename an earlier interest value.
+      const binding = rateContext.test(prefix) ? prefix : tail;
       const lastLabel = (pattern: RegExp) =>
         [...prefix.matchAll(new RegExp(pattern.source, 'giu'))].at(-1)?.index ?? -1;
       const feeBound = lastLabel(fee) > lastLabel(rateContext);
       const value = Number(m[0].replace(/[%％\s]/g, '').replace(',', '.'));
       if (
         !feeBound &&
-        rateContext.test(context) &&
+        rateContext.test(binding) &&
         !/deposit|savings|\bAPY\b|ahorro|tabungan/iu.test(context)
       ) {
-        const isApr = apr.test(context),
-          isInterest = interest.test(context),
-          isMax = max.test(context);
+        const isApr = apr.test(binding),
+          isInterest = interest.test(binding),
+          isMax = max.test(prefix);
         const field =
           isApr && isMax ? 'maximumApr' : isInterest && isMax ? 'maximumInterestRate' : 'rate';
         const rateType = isApr
           ? 'apr'
-          : /\b(?:CAT|CFT|TNA|TEA)\b/u.test(context)
+          : /\b(?:CAT|CFT|TNA|TEA)\b/u.test(binding)
             ? 'local-cost-rate'
             : 'interest';
+        const periodText =
+          /daily|per day|monthly|per month|annual|year|ต่อปี|รายวัน|ต่อวัน|tahun|سالانہ/iu.test(
+            tail,
+          )
+            ? tail
+            : prefix;
+        const unit =
+          isApr || annual.test(periodText)
+            ? '%/year'
+            : /daily|per day|รายวัน|ต่อวัน/iu.test(periodText)
+              ? '%/day'
+              : /monthly|per month/iu.test(periodText)
+                ? '%/month'
+                : '% (period not established)';
         add('financial', field, 'description', context, c.start + from, 15, {
           numericValue: value,
           rateType,
-          unit: annual.test(context) || isApr ? '%/year' : '% (period not established)',
+          unit,
         });
         families.add('rate');
-        if (field === 'maximumInterestRate' && annual.test(context))
+        if (field === 'maximumInterestRate' && unit === '%/year')
           annualMaximumInterests.push(value);
       }
     }
     const times = [...text.matchAll(units)];
     if (
       times.length &&
-      (term.test(text) || (hasLoan && term.test(desc.slice(Math.max(0, c.start - 100), c.start))))
+      !/approval|approved|disburs|processing time|aprobaci[oó]n|persetujuan|อนุมัติ/iu.test(text) &&
+      (term.test(text) ||
+        (max.test(text) &&
+          /^[\s]*(?:max|m[aá]xim|สูงสุด|زیادہ)/iu.test(text) &&
+          /[;\n]\s*$/u.test(desc.slice(0, c.start)) &&
+          term.test(desc.slice(Math.max(0, c.start - 100), c.start))))
     ) {
       const isRange = /\d+\s*(?:to|a|hasta|hingga|hanggang|ถึง|[-–])\s*\d+/iu.test(text);
       const hasMin = /min(?:imum|im[ao])|m[ií]nim[ao]|ขั้นต่ำ|کم از کم/iu.test(text) || isRange;
@@ -355,7 +378,7 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
     classification: strong ? 'confirmed' : 'candidate',
     verdict,
     confidence: strong ? Math.min(95, 60 + families.size * 8) : hasLoan ? (hasIntent ? 45 : 25) : 0,
-    ruleVersion: `${catalog.version}/heuristics-1`,
+    ruleVersion: `${catalog.version}/heuristics-2`,
     analyzedAt: new Date().toISOString(),
     sourceObservedAt: input.observedAt || null,
     summary: strong

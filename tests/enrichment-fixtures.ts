@@ -33,7 +33,9 @@ export const dataSafetyResult: EnrichmentResult = {
 export const applePrivacyResult: EnrichmentResult = {
   status: 'available',
   data: {
-    privacyTypes: [{ identifier: 'DATA_LINKED_TO_YOU', dataCategories: [{ dataCategory: 'Contact Info' }] }],
+    privacyTypes: [
+      { identifier: 'DATA_LINKED_TO_YOU', dataCategories: [{ dataCategory: 'Contact Info' }] },
+    ],
   },
   raw: {
     privacyDetails: { privacyTypes: [{ identifier: 'DATA_LINKED_TO_YOU' }] },
