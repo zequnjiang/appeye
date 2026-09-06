@@ -5,6 +5,7 @@
 - GitHub：[执行与验收 #11](https://github.com/zequnjiang/appeye/issues/11)、[草稿PR #12](https://github.com/zequnjiang/appeye/pull/12)，分支`codex/full-finance-scan`。
 - 需求：[FULL-SCAN-2026-09-07](../requirements/FULL-SCAN-2026-09-07.md)。实现与测试证据：[CTO自检](FULL-SCAN-CTO-SELF-CHECK.md)、[Alex阶段测试](FULL-SCAN-ALEX.md)。两份交接报告的阶段测试通过，不等于真实任务执行完成。
 - 本文负责人：PM。CEO/CTO执行真实采集，Alex独立验证；PM仅读取统计和证据，不修改真实数据库、任务或运行配置。
+- 身份口径：本文2,024个主库App指`country/store/externalId`市场记录，不是全球不同产品数。PM于`2026-09-06T19:15:51.907Z`只读核对：GP901条市场记录对应791个商店App身份，Apple1,123条对应873个；跨国家按`store/externalId`去重合计1,664。两商店同品牌不自动合并。
 - 来源阶段统计时间：`2026-09-06T17:52:49.174Z`；原应用保护及详情分母复核时间：`2026-09-06T17:53:12.877Z`。第5节为`18:01:08.945Z`工程验收阶段快照，第6节为第一项完成后的Alex全量核查与PM`18:24:35.636Z`复核。北京时间均为2026-09-07。任务持续运行，各节是有时间界限的快照；较早的待处理数量不代表当前状态。
 
 ## 1. 初始清单与恢复点
@@ -141,6 +142,12 @@ Alex核对原474的身份、classification/source/override、firstSeen等所有�
 ## 7. 最终报告待补证据
 
 第二项运行中发现的[开发者目录续页缺陷#13](https://github.com/zequnjiang/appeye/issues/13)已独立闭环：修复提交`7f6ea70`经99项工程回归、原响应离线重放和runtime-3真实恢复核查，task602目录从20项补齐33项，旧历史/原HTTP保留，新时间与来源关联准确；[PM缺陷验收](DEVELOPER-CONTINUATION-PM.md)允许最终CI通过后关闭该缺陷。此修复不改变第一项验收，也不代表第二项整体完成。
+
+另有问题分别跟踪，不共用根因或完成结论：[#14](https://github.com/zequnjiang/appeye/issues/14)涉及数值型Google Play开发者ID路由，现已通过110项工程回归及两国真实attempt4恢复；[PM局部验收](DEVELOPER-ROUTE-PM.md)允许最终CI通过后关闭该缺陷。PH任务14412和PK15308均正确请求`/developer`，各取得1项目录，旧3次404/attempt/history保留。runtime-4同时显式重试的6个Apple失败和保持原状的两项BCA developer-degraded不属于#14成功范围。
+
+App1060（ph/App Store，871608181）的privacy、versionHistory、inAppPurchases因官方HTML地址不可获取而失败。CEO在`2026-09-06T19:10:10.187Z`起进行有界只读探测，PM已读本地`finance-2026-09-07-apple-url-probe.json`：无slug入口301到`myaccount%24`，该canonical地址再301到自身；官方lookup的`?uo=4`地址也自循环，解码slug及`?l=en`变体仍回到循环地址。探测没有取得HTML，且明确不是一次成功资料入库响应；可用详情/lookup没有因此作废。后续App1172（pk/App Store，1089271220）也出现这三类独立失败，与两条BCA目录告警继续单列待核查。
+
+上述Apple两条市场记录共6项现已通过[本轮来源限制PM验收](APPLE-SOURCE-LIMIT-PM.md)：runtime-4实际追加有限3次后，各任务累计1–6次均failed，新3次HTTP账本均含`redirect count exceeded`；旧记录保留，当前没有任何成功资料或成功时间。Alex于19:16:00.850Z、PM于19:17:20.659Z分别只读核对，官方PH和PK的canonical自循环证据匹配。结论是“6项已尝试、失败、本轮来源受限”，**不是6项取得成功或成功空**；任务保留failed，不要求篡改为成功。其余BCA告警仍未解决、补充/评论继续，整体未验收。循环是在具体时间和店面观测到，不证明永久下架、无隐私政策、无版本记录或无IAP。
 
 以下未完成项由实际执行和独立测试补齐，不能以预计值填入：
 

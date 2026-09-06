@@ -89,3 +89,33 @@ FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-20
 ```
 
 CTO 自检包括完整 `npm run check`（99/99、全工程类型与构建通过）、CLI 单独严格类型检查，以及原响应离线重放。Alex 独立回归覆盖两种实际 SDK 布局、未知/坏结构与空页活 token、33 项完整解析、原文和来源引用、重试范围、历史保留与有限预算；最后续页筛选加固后的正式结果见 Alex 针对 #13 的独立报告。源码修复交接后由 CEO 安排 runtime-3 启用和实际任务复采，本文不将尚未执行的真实恢复写为完成。
+
+## 数字开发者显示名的目录路由修复（#14）
+
+真实 batch task 14412（app 970，菲律宾，Google Play）对开发者 `059916517` 的三次请求均使用 `/store/apps/dev` 并返回 404。只读核对同批详情 task 5903 / HTTP 1139（200）发现：应用 `com.smartsave.budget.finance.book` 的真实发布者锚点及 script data 都指定 `/store/apps/developer?id=059916517`。维护库会丢弃该链接的路径，仅保留开发者 ID，再用纯数字正则决定 `/dev` 路径；这是已定位的内部路由缺陷，不能把这三次 404 解读为开发者页面下架。单独跟踪于 [#14](https://github.com/zequnjiang/appeye/issues/14)。
+
+修复仅适用于本批次 Google developer 补充采集。runner 从同 batch、同 app、同国家、成功详情任务中读取已保存的 HTTP 200；详情 URL 的应用 ID、国家及语言必须与当前冻结任务一致。`server/developer-route.ts` 只接受同开发者字符串 ID（保留前导零、只解码一次）的官方 origin 和 `/dev` 或 `/developer` 精确路径，拒绝重复 ID 参数、异站地址、身份不符或两种路径相互冲突。有效路径作为可选 `developerUrl` 和 `developerSourceHttpId` 传入 provider 并冻结进本次任务；没有可靠证据时保持库原行为，不做未验证的 404 地址猜测。
+
+transport 仅将维护库初始目录请求的路径改为该真实链接提供的路径，ID 不变，国家/语言使用当前任务上下文；续页、限速、超时和取消机制不变。完整真实响应继续留存，成功资料在 `raw.routing` 记录原详情 HTTP ID、验证方式与实际目录来源。成功 `source` 和失败 `attemptSource` 均使用同一已验证路径，现有后台分别展示最近成功来源和最近尝试来源；旧失败的原 URL、HTTP、attempt 和 enrichment history 不修改。显式 `retryFailed()` 也保留累计 attempt 序号，并沿用 #13 的有限恢复预算，从而避免重试序号重新从 1 开始。
+
+CTO 以真实已保存的 HTTP 1139 离线重放 `app()`，复现 developer/developerId 均为 `059916517` 且 developerUrl 缺失；以固定 name-layout HTML 注入维护 SDK，原路由复现 404，新边界成功访问夹具的 `/developer` 路径并解析数据，原响应不变、ID 保留前导零、PH/en 上下文准确、0 告警。该测试没有声称已联网验证目标目录的当前可用性。全过程 0 新真实网络请求、0 真实库写入、0 生产进程操作。
+
+CTO 当前完整自检 `npm run check` 99/99、全工程类型和构建、CLI 单独严格类型均通过。针对 #14 的新专项由 Alex 独立补充并完成后报告；CEO 应核对当前失败列表、记录代码版本、受控重启同一 batch，再显式 `--retry-failed` 执行实际恢复，之后验证原三条失败历史保留及新尝试结果。工程修复不等于目标目录已真实重采成功。
+
+## 独立诊断增强：保留传输错误底层原因（#11）
+
+与 #14 路由修复分开处理：CEO 对 Apple 三个 `fetch failed` 补充任务做了有界的官方域名探测，记录于本地 `data/batches/finance-2026-09-07-apple-url-probe.json`，确认简称 URL 和真实 lookup 提供的 trackViewURL 均出现上游 301 自循环，未得到成功 HTML。因此没有更换店面、猜测其他数据来源或把该上游错误标为已解决。
+
+为使后续失败保留诊断信息，新增 `server/transport-error.ts` 的 `describeTransportError()`，只改变 full-scan HTTP ledger 的 error 文本：保留原 message（最多 2000 字符），并追加最多两层 cause 的 name/message/code，分别限长 100/1000/100；数值 code 必须有限。不复制 stack、请求/响应 body 或其他任意字段；循环引用和不可读取属性不会中断错误记录。没有 cause 的普通错误仍保持原消息。provider 在记录后仍原样抛出原异常，不改变重试、限速、取消或任务成功/失败判断。
+
+CTO 已做严格类型检查及完全注入的传输测试：`fetch failed` 保留两层底层原因，第三层、stack 和 body 不进入 ledger，status 仍为 null，调用者仍收到原失败；0 真实网络和真实库写入。Alex 将此诊断专项与 #14 的最终全回归一起验证，验收范围仍区分“内部路径已修复”和“上游自循环仅保留准确失败与可恢复记录”。
+
+追加最终交接结果：Alex 对冻结源码独立执行完整检查，**110/110 测试、严格类型及生产构建全部通过**，包括 9 项 #14 路由回归与 2 项传输原因记录回归，见 [DEVELOPER-ROUTE-ALEX.md](./DEVELOPER-ROUTE-ALEX.md)。CTO 也只读核对同包的 PK 失败 task 15308：其本批详情 task 6643 / HTTP 1449 提供同一 `/developer?id=059916517` 官方路径，新 helper 可准确取证；PH 和 PK 使用各自国家的原详情证据，不跨国复用。源码保持冻结，由 CEO 执行一次受控 runtime-4 恢复并核对新的实际结果。
+
+## source-5：开发者续页返回上游 RPC 错误，待有限重试
+
+运行中的两项印度尼西亚 BCA 开发者目录 task 16108 / app 1182、task 16116 / app 1183 出现 `developer-degraded`。调查时，各自初始页面保留 10 项；续页 HTTP 7232 / 7236 虽为 HTTP 200，但 `qnKhOb` 的 payload 为 null，错误结构为 code 5、公开类型 `PlayDataError`、detail `[1]`，不存在任何可用于 #13 布局转换的应用数组。初始页面 HTTP 为 7231 / 7235。该现象与 #13 的已保存紧凑应用数组解析缺陷不同；不把未经公开核实的错误码业务含义解读为下架，也不把这 10 项视为完整开发者目录。
+
+仅使用上述原响应进行离线重放，输出的 10 项 JSON 与当前已存部分资料逐字段相同，原 HTTP body 不变；维护 SDK 构造的续页 token 与原初始页面指定 token 逐字符相同，国家/语言均为 id/id，未发现取错 token 的证据。实际运行 ledger 没有保存请求 body，因此该比较明确属于当前安装 SDK 的离线请求构造验证，不能冒充实际请求体留存。此次调查 0 新真实网络、0 真实数据库写入、0 源码修改。
+
+只含引用、时间、哈希、计数、类型、代码及验证结论的聚合证据保存在忽略提交的 `data/batches/finance-2026-09-07-developer-rpc-source-audit.json`；没有导出 token 或原响应正文至文档。当前状态保留部分成功资料及失败续页原文，继续标记需复核；#13 的限定重试入口正确排除本类错误。CEO 将先完成本轮全部补充采集、核对同类范围，再以唯一写入进程控制一次有证据的有限重试，追加新尝试而不修改旧记录。该问题尚未被新代码解决，也没有作为 unsupported 或空成功跳过。
