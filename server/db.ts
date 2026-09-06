@@ -2,6 +2,8 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { readFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyLoan, type LoanAnalysis } from './loan-identification.js';
+import { normalizeApp } from './normalization.js';
 import type {
   AppFilters,
   AppRecord,
@@ -15,6 +17,12 @@ import type {
   Review,
   Snapshot,
   StoreName,
+  Enrichment,
+  EnrichmentContext,
+  EnrichmentHistory,
+  EnrichmentKind,
+  EnrichmentResult,
+  DiscoveryObservation,
 } from './types.js';
 
 type Row = Record<string, any>;
@@ -56,6 +64,18 @@ const nullableFields = [
   'currency',
   'developerWebsite',
   'privacyPolicy',
+  'developerId',
+  'developerUrl',
+  'developerEmail',
+  'developerAddress',
+  'developerLegalName',
+  'developerLegalEmail',
+  'developerLegalAddress',
+  'developerLegalPhoneNumber',
+  'sellerName',
+  'sellerUrl',
+  'screenshots',
+  'storeData',
 ] as const;
 const defaultCountries = [
   { code: 'th', name: '泰国', language: 'th', keywords: ['สินเชื่อ', 'เงินกู้', 'loan'] },
@@ -73,9 +93,11 @@ const defaultCountries = [
 
 export function normalizeForStore(data: NormalizedApp, store: StoreName): NormalizedApp {
   const result: Record<string, unknown> = {
+    ...data,
     externalId: String(data.externalId),
     title: data.title,
   };
+  delete result.raw;
   for (const field of nullableFields) result[field] = data[field] ?? null;
   if (store === 'app-store') result.installs = result.minInstalls = result.maxInstalls = null;
   return result as unknown as NormalizedApp;
@@ -105,6 +127,8 @@ export class Store {
     }
     for (const c of defaultCountries)
       if (!this.getCountry(c.code)) this.upsertCountry({ ...c, enabled: true, intervalHours: 24 });
+    this.backfillCurrentStoreData();
+    this.backfillLoanAnalyses();
   }
   close() {
     this.db.close();
@@ -197,14 +221,14 @@ export class Store {
       time,
       time,
     );
-    return this.appRow(
-      this.one(
-        'SELECT * FROM apps WHERE store=? AND external_id=? AND country=?',
-        input.store,
-        input.externalId,
-        input.country,
-      )!,
-    );
+    const row = this.one(
+      'SELECT * FROM apps WHERE store=? AND external_id=? AND country=?',
+      input.store,
+      input.externalId,
+      input.country,
+    )!;
+    if (!row.loan_analysis) this.analyzeApp(row.id);
+    return this.getApp(row.id)!;
   }
   getApp(id: number): AppRecord | undefined {
     const row = this.one('SELECT * FROM apps WHERE id=?', id);
@@ -236,6 +260,10 @@ export class Store {
       externalId: row.external_id,
       country: row.country,
       classification: row.classification,
+      effectiveClassification: row.classification,
+      classificationSource: row.classification_source,
+      manualOverride: !!row.manual_override,
+      loanAnalysis: parse(row.loan_analysis),
       sourceKeyword: row.source_keyword,
       firstSeenAt: row.first_seen_at,
       lastSeenAt: row.last_seen_at,
@@ -267,6 +295,10 @@ export class Store {
         parts.push(`${prefix}${key}=?`);
         params.push(filters[key]!);
       }
+    if (filters.loanVerdict) {
+      parts.push(`json_extract(${prefix}loan_analysis,'$.verdict')=?`);
+      params.push(filters.loanVerdict);
+    }
     if (filters.q) {
       parts.push(
         `(${prefix}title LIKE ? ESCAPE '\\' OR ${prefix}developer LIKE ? ESCAPE '\\' OR ${prefix}external_id LIKE ? ESCAPE '\\')`,
@@ -277,8 +309,274 @@ export class Store {
     return { clause: parts.length ? `WHERE ${parts.join(' AND ')}` : '', params };
   }
   updateClassification(id: number, classification: Classification): AppRecord | undefined {
-    this.run('UPDATE apps SET classification=? WHERE id=?', classification, id);
+    this.run(
+      "UPDATE apps SET classification=?,manual_override=1,classification_source='manual' WHERE id=?",
+      classification,
+      id,
+    );
     return this.getApp(id);
+  }
+  setClassificationMode(id: number, mode: 'auto'): AppRecord | undefined {
+    if (mode !== 'auto') throw new Error('Unsupported classification mode');
+    const app = this.getApp(id);
+    if (!app) return undefined;
+    this.run("UPDATE apps SET manual_override=0,classification_source='auto' WHERE id=?", id);
+    this.analyzeApp(id);
+    return this.getApp(id);
+  }
+  saveLoanAnalysis(appId: number, analysis: LoanAnalysis): AppRecord | undefined {
+    this.run(
+      'UPDATE apps SET loan_analysis=?,classification=CASE WHEN manual_override=0 THEN ? ELSE classification END WHERE id=?',
+      JSON.stringify(analysis),
+      analysis.classification,
+      appId,
+    );
+    return this.getApp(appId);
+  }
+  analyzeApp(appId: number, observedAt?: string): LoanAnalysis {
+    const app = this.getApp(appId);
+    if (!app) throw new Error('App not found');
+    const analysis = classifyLoan({
+      ...app,
+      raw: this.getRawDetail(appId) ?? app.storeData,
+      observedAt: observedAt ?? app.lastFetchedAt ?? app.firstSeenAt,
+    });
+    this.saveLoanAnalysis(appId, analysis);
+    return analysis;
+  }
+  backfillLoanAnalyses(force = false): number {
+    const rows = this.all(`SELECT id FROM apps ${force ? '' : 'WHERE loan_analysis IS NULL'}`);
+    for (const row of rows) this.analyzeApp(row.id);
+    return rows.length;
+  }
+  getRawDetail(appId: number): unknown {
+    return parse(
+      this.one('SELECT raw FROM snapshots WHERE app_id=? ORDER BY id DESC LIMIT 1', appId)?.raw,
+    );
+  }
+  backfillCurrentStoreData(): number {
+    let count = 0;
+    for (const row of this.all(
+      "SELECT * FROM apps WHERE json_extract(data,'$.storeData') IS NULL",
+    )) {
+      const raw = this.getRawDetail(row.id);
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const original = parse(row.data);
+      const projected = normalizeApp(
+        {
+          ...raw,
+          appId: row.store === 'google-play' ? row.external_id : (raw as Row).appId,
+          id: row.store === 'app-store' ? row.external_id : (raw as Row).id,
+          title: original.title,
+        },
+        row.store,
+      );
+      const merged = normalizeForStore(
+        { ...projected, ...original, storeData: raw as Record<string, unknown> },
+        row.store,
+      );
+      this.run('UPDATE apps SET data=? WHERE id=?', JSON.stringify(merged), row.id);
+      count++;
+    }
+    return count;
+  }
+  recordDiscovery(
+    appId: number,
+    input: {
+      keyword: string;
+      requestCountry: string;
+      requestLanguage: string;
+      source: string;
+      data: NormalizedApp;
+      raw?: unknown;
+      observedAt?: string;
+    },
+  ): DiscoveryObservation {
+    if (!this.getApp(appId)) throw new Error('App not found');
+    const observedAt = input.observedAt ?? now();
+    const result = this.run(
+      'INSERT INTO discovery_observations(app_id,observed_at,keyword,request_country,request_language,source,data,raw) VALUES (?,?,?,?,?,?,?,?)',
+      appId,
+      observedAt,
+      input.keyword,
+      input.requestCountry,
+      input.requestLanguage,
+      input.source,
+      JSON.stringify(input.data),
+      JSON.stringify(input.raw ?? input.data.raw ?? input.data),
+    );
+    return {
+      id: Number(result.lastInsertRowid),
+      appId,
+      observedAt,
+      keyword: input.keyword,
+      requestCountry: input.requestCountry,
+      requestLanguage: input.requestLanguage,
+      source: input.source,
+      data: input.data,
+      raw: input.raw ?? input.data.raw ?? input.data,
+    };
+  }
+  listDiscoveries(
+    appId: number,
+    limit = 100,
+    offset = 0,
+  ): { discoveries: DiscoveryObservation[]; total: number } {
+    return {
+      discoveries: this.all(
+        'SELECT * FROM discovery_observations WHERE app_id=? ORDER BY id DESC LIMIT ? OFFSET ?',
+        appId,
+        limit,
+        offset,
+      ).map((r) => ({
+        id: r.id,
+        appId: r.app_id,
+        observedAt: r.observed_at,
+        keyword: r.keyword,
+        requestCountry: r.request_country,
+        requestLanguage: r.request_language,
+        source: r.source,
+        data: parse(r.data),
+        raw: parse(r.raw),
+      })),
+      total: this.one('SELECT COUNT(*) n FROM discovery_observations WHERE app_id=?', appId)!.n,
+    };
+  }
+  saveEnrichment(
+    appId: number,
+    kind: EnrichmentKind,
+    result: EnrichmentResult,
+    attemptedAt = now(),
+  ): Enrichment {
+    if (!this.getApp(appId)) throw new Error('App not found');
+    const success = result.status === 'available' || result.status === 'empty';
+    return this.transaction(() => {
+      this.run(
+        'INSERT INTO enrichment_history(app_id,kind,status,fetched_at,source,request_country,request_language,data,raw,error,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        appId,
+        kind,
+        result.status,
+        attemptedAt,
+        result.source,
+        result.requestCountry,
+        result.requestLanguage,
+        success ? JSON.stringify(result.data ?? null) : null,
+        success ? JSON.stringify(result.raw ?? result.data ?? null) : null,
+        null,
+        result.note ?? null,
+      );
+      this.run(
+        `INSERT INTO enrichments(app_id,kind,status,last_attempt_at,last_success_at,source,request_country,request_language,attempt_source,attempt_request_country,attempt_request_language,data,raw,error,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(app_id,kind) DO UPDATE SET status=excluded.status,last_attempt_at=excluded.last_attempt_at,last_success_at=CASE WHEN excluded.status IN ('available','empty') THEN excluded.last_success_at ELSE enrichments.last_success_at END,source=CASE WHEN excluded.status IN ('available','empty') THEN excluded.source ELSE enrichments.source END,request_country=CASE WHEN excluded.status IN ('available','empty') THEN excluded.request_country ELSE enrichments.request_country END,request_language=CASE WHEN excluded.status IN ('available','empty') THEN excluded.request_language ELSE enrichments.request_language END,attempt_source=excluded.attempt_source,attempt_request_country=excluded.attempt_request_country,attempt_request_language=excluded.attempt_request_language,data=CASE WHEN excluded.status IN ('available','empty') THEN excluded.data ELSE enrichments.data END,raw=CASE WHEN excluded.status IN ('available','empty') THEN excluded.raw ELSE enrichments.raw END,error=NULL,note=excluded.note`,
+        appId,
+        kind,
+        result.status,
+        attemptedAt,
+        success ? attemptedAt : null,
+        success ? result.source : null,
+        success ? result.requestCountry : null,
+        success ? result.requestLanguage : null,
+        result.source,
+        result.requestCountry,
+        result.requestLanguage,
+        success ? JSON.stringify(result.data ?? null) : null,
+        success ? JSON.stringify(result.raw ?? result.data ?? null) : null,
+        null,
+        result.note ?? null,
+      );
+      return this.listEnrichments(appId).find((r) => r.kind === kind)!;
+    });
+  }
+  failEnrichment(
+    appId: number,
+    kind: EnrichmentKind,
+    error: string,
+    context: EnrichmentContext,
+    attemptedAt = now(),
+  ): Enrichment {
+    if (!this.getApp(appId)) throw new Error('App not found');
+    return this.transaction(() => {
+      this.run(
+        'INSERT INTO enrichment_history(app_id,kind,status,fetched_at,source,request_country,request_language,data,raw,error,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        appId,
+        kind,
+        'failed',
+        attemptedAt,
+        context.source,
+        context.requestCountry,
+        context.requestLanguage,
+        null,
+        null,
+        error,
+        context.note ?? null,
+      );
+      this.run(
+        `INSERT INTO enrichments(app_id,kind,status,last_attempt_at,attempt_source,attempt_request_country,attempt_request_language,error,note) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(app_id,kind) DO UPDATE SET status=excluded.status,last_attempt_at=excluded.last_attempt_at,attempt_source=excluded.attempt_source,attempt_request_country=excluded.attempt_request_country,attempt_request_language=excluded.attempt_request_language,error=excluded.error,note=excluded.note`,
+        appId,
+        kind,
+        'failed',
+        attemptedAt,
+        context.source,
+        context.requestCountry,
+        context.requestLanguage,
+        error,
+        context.note ?? null,
+      );
+      return this.listEnrichments(appId).find((r) => r.kind === kind)!;
+    });
+  }
+  listEnrichments(appId: number): Enrichment[] {
+    return this.all('SELECT * FROM enrichments WHERE app_id=? ORDER BY kind', appId).map((r) => ({
+      appId: r.app_id,
+      kind: r.kind,
+      status: r.status,
+      fetchedAt: r.last_success_at,
+      lastSuccessAt: r.last_success_at,
+      lastAttemptAt: r.last_attempt_at,
+      source: r.source ?? r.attempt_source,
+      requestCountry: r.request_country,
+      requestLanguage: r.request_language,
+      attemptSource: r.attempt_source,
+      attemptRequestCountry: r.attempt_request_country,
+      attemptRequestLanguage: r.attempt_request_language,
+      data: parse(r.data),
+      raw: parse(r.raw),
+      error: r.error,
+      note: r.note,
+    }));
+  }
+  listEnrichmentHistory(
+    appId: number,
+    kind: EnrichmentKind,
+    limit = 100,
+    offset = 0,
+  ): { history: EnrichmentHistory[]; total: number } {
+    return {
+      history: this.all(
+        'SELECT * FROM enrichment_history WHERE app_id=? AND kind=? ORDER BY id DESC LIMIT ? OFFSET ?',
+        appId,
+        kind,
+        limit,
+        offset,
+      ).map((r) => ({
+        id: r.id,
+        appId: r.app_id,
+        kind: r.kind,
+        status: r.status,
+        fetchedAt: r.fetched_at,
+        source: r.source,
+        requestCountry: r.request_country,
+        requestLanguage: r.request_language,
+        data: parse(r.data),
+        raw: parse(r.raw),
+        error: r.error,
+        note: r.note,
+      })),
+      total: this.one(
+        'SELECT COUNT(*) n FROM enrichment_history WHERE app_id=? AND kind=?',
+        appId,
+        kind,
+      )!.n,
+    };
   }
   setAppError(id: number, error: string | null) {
     this.run('UPDATE apps SET last_error=? WHERE id=?', error, id);
@@ -325,6 +623,7 @@ export class Store {
         observedAt,
         appId,
       );
+      this.analyzeApp(appId, observedAt);
       return {
         id: Number(inserted.lastInsertRowid),
         appId,

@@ -1,3 +1,4 @@
+import type { LoanAnalysis } from '../server/loan-identification';
 export type StoreName = 'google-play' | 'app-store';
 export type Classification = 'candidate' | 'confirmed' | 'excluded';
 export interface Country {
@@ -36,6 +37,9 @@ export interface MarketApp {
   lastFetchedAt: string | null;
   lastError?: string | null;
   classification: Classification;
+  classificationSource?: 'auto' | 'manual' | 'legacy';
+  manualOverride?: boolean;
+  loanAnalysis?: LoanAnalysis | null;
   updateCount: number;
   observedUpdateIntervalDays: number | null;
   [key: string]: unknown;
@@ -86,7 +90,7 @@ export interface Review {
 }
 export interface Job {
   id: number;
-  type: 'discover' | 'refresh' | 'reviews';
+  type: 'discover' | 'refresh' | 'reviews' | 'enrich';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   country: string | null;
   store: StoreName | null;

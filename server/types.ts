@@ -1,3 +1,4 @@
+import type { LoanAnalysis } from './loan-identification.js';
 export type StoreName = 'google-play' | 'app-store';
 export type Classification = 'candidate' | 'confirmed' | 'excluded';
 export interface Country {
@@ -35,6 +36,18 @@ export interface NormalizedApp {
   genre?: string | null;
   developerWebsite?: string | null;
   privacyPolicy?: string | null;
+  developerId?: string | null;
+  developerUrl?: string | null;
+  developerEmail?: string | null;
+  developerAddress?: string | null;
+  developerLegalName?: string | null;
+  developerLegalEmail?: string | null;
+  developerLegalAddress?: string | null;
+  developerLegalPhoneNumber?: string | null;
+  sellerName?: string | null;
+  sellerUrl?: string | null;
+  screenshots?: string[] | null;
+  storeData?: Record<string, unknown> | null;
   raw?: unknown;
 }
 export interface AppRecord extends NormalizedApp {
@@ -42,6 +55,10 @@ export interface AppRecord extends NormalizedApp {
   store: StoreName;
   country: string;
   classification: Classification;
+  effectiveClassification: Classification;
+  classificationSource: 'auto' | 'manual' | 'legacy';
+  manualOverride: boolean;
+  loanAnalysis: LoanAnalysis | null;
   sourceKeyword: string | null;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -88,7 +105,7 @@ export interface Change {
   store: StoreName;
   country: string;
 }
-export type JobType = 'discover' | 'refresh' | 'reviews';
+export type JobType = 'discover' | 'refresh' | 'reviews' | 'enrich';
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export interface Job {
   id: number;
@@ -116,13 +133,79 @@ export interface Provider {
   search(input: ProviderContext & { keyword: string }): Promise<DiscoveredApp[]>;
   app(input: ProviderContext & { externalId: string }): Promise<NormalizedApp>;
   reviews(input: ProviderContext & { externalId: string }): Promise<NormalizedReview[]>;
+  enrich?(
+    input: ProviderContext & {
+      externalId: string;
+      kind: EnrichmentKind;
+      developerId?: string | null;
+    },
+  ): Promise<EnrichmentResult>;
 }
 export type Providers = Record<StoreName, Provider>;
 export interface AppFilters {
   country?: string;
   store?: string;
   classification?: string;
+  loanVerdict?: 'strong' | 'possible' | 'insufficient';
   q?: string;
   limit?: number;
   offset?: number;
+}
+
+export const enrichmentKinds = [
+  'permissions',
+  'dataSafety',
+  'privacy',
+  'versionHistory',
+  'inAppPurchases',
+  'ratings',
+  'developer',
+] as const;
+export type EnrichmentKind = (typeof enrichmentKinds)[number];
+export type EnrichmentStatus = 'available' | 'empty' | 'failed' | 'unsupported';
+export interface EnrichmentContext {
+  source: string;
+  requestCountry: string | null;
+  requestLanguage: string | null;
+  note?: string | null;
+}
+export interface EnrichmentResult extends EnrichmentContext {
+  status: Exclude<EnrichmentStatus, 'failed'>;
+  data: unknown;
+  raw: unknown;
+}
+export interface Enrichment extends EnrichmentContext {
+  appId: number;
+  kind: EnrichmentKind;
+  status: EnrichmentStatus;
+  fetchedAt: string | null;
+  lastSuccessAt: string | null;
+  lastAttemptAt: string;
+  attemptSource: string;
+  attemptRequestCountry: string | null;
+  attemptRequestLanguage: string | null;
+  data: unknown;
+  raw: unknown;
+  error: string | null;
+}
+export interface EnrichmentHistory extends EnrichmentContext {
+  id: number;
+  appId: number;
+  kind: EnrichmentKind;
+  status: EnrichmentStatus;
+  fetchedAt: string;
+  data: unknown;
+  raw: unknown;
+  error: string | null;
+}
+export interface DiscoveryObservation {
+  id: number;
+  appId: number;
+  observedAt: string;
+  keyword: string;
+  requestCountry: string;
+  requestLanguage: string;
+  source: string;
+  data: NormalizedApp;
+  raw: unknown;
 }

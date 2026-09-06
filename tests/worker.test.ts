@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from '../server/db.js';
 import { createWorker } from '../server/worker.js';
-import type { ProviderContext } from '../server/types.js';
+import { enrichmentKinds, type ProviderContext } from '../server/types.js';
 import { creditApp, creditReview, fixtureProvider, fixtureProviders } from './fixtures.js';
 
 test('AC-04/06/09/10: both injected stores propagate context and complete discovery → snapshot → reviews', async () => {
@@ -20,15 +20,18 @@ test('AC-04/06/09/10: both injected stores propagate context and complete discov
     store.enqueueJob({ type: 'discover', country: 'mx', store: 'app-store' });
     let executed = 0;
     while (await worker.runOnce()) { executed++; assert.ok(executed <= 10, 'bounded queue must drain'); }
-    assert.equal(executed, 6);
+    assert.equal(executed, 8);
     assert.equal(store.listApps().total, 2);
-    assert.equal(store.listJobs({ status: 'succeeded' }).total, 6);
+    assert.equal(store.listJobs({ status: 'succeeded' }).total, 8);
     assert.ok(calls.every(call => call.country === 'mx' && call.language === 'es'));
     for (const app of store.listApps().apps) {
       assert.equal(app.classification, 'candidate');
       assert.equal(store.listSnapshots(app.id).total, 1);
       assert.equal(store.listReviews(app.id).total, 1);
       assert.equal(app.updateCount, 0);
+      assert.equal(store.listEnrichments(app.id).length, enrichmentKinds.length);
+      assert.ok(store.listEnrichments(app.id).every(item => item.status === 'unsupported' && item.data === null));
+      assert.equal(store.listDiscoveries(app.id).total, 2, 'both duplicate search rows remain as provenance while app jobs deduplicate');
     }
     assert.equal(store.listApps({ store: 'app-store' }).apps[0].installs, null);
   } finally { worker.stop(); store.close(); }

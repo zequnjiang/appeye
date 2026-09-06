@@ -38,6 +38,16 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { api, post, patch, query } from './api';
+import {
+  ClassificationNote,
+  LoanIntelligence,
+  StoreInformation,
+  EnrichmentPanel,
+  ObservationHistory,
+  FieldTree,
+  verdictLabels,
+} from './Intelligence';
+import type { Enrichment } from '../server/types';
 import type {
   Country,
   MarketApp,
@@ -77,6 +87,7 @@ const jobTypes: Record<string, string> = {
   discover: '发现应用',
   refresh: '更新信息',
   reviews: '采集评价',
+  enrich: '补充资料',
 };
 const fields: Record<string, string> = {
   version: '版本更新',
@@ -694,6 +705,7 @@ function AppsPage({
   const [country, setCountry] = useState(''),
     [store, setStore] = useState(''),
     [classification, setClassification] = useState(''),
+    [loanVerdict, setLoanVerdict] = useState(''),
     [q, setQ] = useState(''),
     [search, setSearch] = useState(''),
     [offset, setOffset] = useState(0);
@@ -701,9 +713,9 @@ function AppsPage({
     const t = setTimeout(() => setSearch(q), 250);
     return () => clearTimeout(t);
   }, [q]);
-  useEffect(() => setOffset(0), [country, store, classification, search]);
+  useEffect(() => setOffset(0), [country, store, classification, loanVerdict, search]);
   const { data, error, loading } = useData<{ apps: MarketApp[]; total: number }>(
-    '/apps' + query({ country, store, classification, q: search, limit: 20, offset }),
+    '/apps' + query({ country, store, classification, loanVerdict, q: search, limit: 20, offset }),
     version,
   );
   return (
@@ -719,7 +731,10 @@ function AppsPage({
         <div className="button-group">
           <a
             className="button secondary"
-            href={'/api/export/apps.csv' + query({ country, store, classification, q: search })}
+            href={
+              '/api/export/apps.csv' +
+              query({ country, store, classification, loanVerdict, q: search })
+            }
           >
             <ArrowDownToLine size={16} />
             导出 CSV
@@ -757,6 +772,18 @@ function AppsPage({
             <option value="">全部分类</option>
             {Object.entries(classes).map(([v, label]) => (
               <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="筛选识别证据"
+            value={loanVerdict}
+            onChange={(e) => setLoanVerdict(e.target.value)}
+          >
+            <option value="">全部识别证据</option>
+            {Object.entries(verdictLabels).map(([value, label]) => (
+              <option value={value} key={value}>
                 {label}
               </option>
             ))}
@@ -813,6 +840,7 @@ function AppsPage({
                         >
                           {classes[app.classification]}
                         </Badge>
+                        <ClassificationNote app={app} />
                       </td>
                       <td>
                         <strong className="rating">
@@ -948,7 +976,7 @@ function AppDetail({
   id: number;
   version: number;
   onBack: () => void;
-  onRefresh: (id: number, type: 'refresh' | 'reviews') => void;
+  onRefresh: (id: number, type: 'refresh' | 'reviews' | 'enrich') => void;
   onNotify: (s: string) => void;
   onChanged: () => void;
 }) {
@@ -957,6 +985,8 @@ function AppDetail({
     snapshots: Snapshot[];
     changes: Change[];
     reviews: Review[];
+    rawDetail: unknown;
+    enrichments: Enrichment[];
   }>(`/apps/${id}`, version);
   const [tab, setTab] = useState('overview'),
     [metric, setMetric] = useState<'score' | 'minInstalls' | 'ratings'>('score'),
@@ -994,6 +1024,7 @@ function AppDetail({
               </Badge>
             </div>
             <p>{app.developer || '开发者暂未提供'}</p>
+            <ClassificationNote app={app} />
             <div className="detail-meta">
               <StoreMark store={app.store} />
               <span>
@@ -1071,6 +1102,9 @@ function AppDetail({
       <div className="tabs" role="tablist" aria-label="应用详情">
         {[
           ['overview', '应用概况'],
+          ['intelligence', '信贷识别'],
+          ['company', '公司与商店信息'],
+          ['enrichments', '权限与隐私'],
           ['changes', '变化记录'],
           ['reviews', '用户评价'],
           ['raw', '采集快照'],
@@ -1142,6 +1176,17 @@ function AppDetail({
           </div>
         </>
       )}
+      {tab === 'intelligence' && (
+        <LoanIntelligence app={app} onChanged={onChanged} onNotify={onNotify} />
+      )}
+      {tab === 'company' && <StoreInformation app={app} rawDetail={data.rawDetail} />}
+      {tab === 'enrichments' && (
+        <EnrichmentPanel
+          app={app}
+          enrichments={data.enrichments || []}
+          onCollect={() => onRefresh(id, 'enrich')}
+        />
+      )}
       {tab === 'changes' && <DetailChanges id={id} version={version} />}
       {tab === 'reviews' && (
         <Reviews
@@ -1154,28 +1199,18 @@ function AppDetail({
       )}
       {tab === 'raw' && (
         <section className="panel padded">
-          <h2>采集快照</h2>
+          <h2>采集快照与发现记录</h2>
+          <ObservationHistory
+            endpoint={`/apps/${id}/discoveries`}
+            listKey="discoveries"
+            title="搜索发现原始记录"
+          />
           <p className="muted">规范化字段与原始商店返回数据用于追溯。最近的观测在前。</p>
-          {data.snapshots?.length ? (
-            <div className="snapshots">
-              {data.snapshots.map((s) => (
-                <details key={s.id}>
-                  <summary>
-                    {date(s.observedAt, true)}
-                    <span>
-                      版本 {s.data.version || '—'} · 评分 {number(s.data.score)}
-                    </span>
-                  </summary>
-                  <pre>{JSON.stringify(s, null, 2)}</pre>
-                </details>
-              ))}
-            </div>
-          ) : (
-            <Empty
-              title="还没有快照"
-              description="首次成功采集应用详情后，会保存第一份数据快照。"
-            />
-          )}
+          <ObservationHistory
+            endpoint={`/apps/${id}/snapshots`}
+            listKey="snapshots"
+            title="全部详情快照"
+          />
         </section>
       )}
     </>
@@ -1297,6 +1332,7 @@ function Reviews({
                     <p>{r.replyText}</p>
                   </div>
                 )}
+                <FieldTree value={r} label="评论完整字段与原始数据" depth={1} />
               </article>
             ))}
           </div>
@@ -1971,7 +2007,7 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     setToast(message);
     refresh();
   }
-  async function collect(id: number, type: 'refresh' | 'reviews') {
+  async function collect(id: number, type: 'refresh' | 'reviews' | 'enrich') {
     try {
       await post('/jobs', { type, appId: id });
       setToast('采集任务已加入队列，可在采集任务中查看进度');

@@ -1,6 +1,6 @@
 # Appeye
 
-面向信贷行业的应用市场观察后台。用 Node.js 与 `google-play-scraper`、`app-store-scraper` 发现和持续跟踪应用，比较版本、基本信息、评分、安装量与评价样本。
+面向信贷行业的应用市场观察后台。用 Node.js 与 `@mradex77/google-play-scraper`、`@perttu/app-store-scraper` 发现和持续跟踪应用，比较版本、基本信息、评分、安装量与评价样本。
 
 初始市场：泰国（TH）、墨西哥（MX）、菲律宾（PH）、巴基斯坦（PK）、印度尼西亚（ID）、阿根廷（AR）。国家、语言、关键词与采集周期均可在后台增改。
 
@@ -43,9 +43,10 @@ NODE_ENV=production npm start
 
 ## 后台能力
 
-- 市场概览：国家覆盖、人工确认分类、近期变化和采集运行情况。
-- 应用库：国家/商店/分类过滤，名称/开发者/ID 搜索，手动添加应用，CSV 导出。
-- 详情：基本信息、商店发布日期、首次发现时间、历史趋势、字段差异、版本观测频率、评论样本和原始快照。
+- 市场概览：国家覆盖、自动或人工确认分类、近期变化和采集运行情况。
+- 应用库：国家/商店/分类/识别证据过滤，名称/开发者/ID 搜索，手动添加应用，CSV 导出。
+- 详情：公司与开发者、商店完整字段、权限与隐私、版本历史、评分分布、截图、评论原始信息，以及可翻页的快照、搜索发现和补充采集历史。
+- 信贷识别：六国语言启发式规则，展示描述原文、主体声明、APR/利率/费用/期限证据、适用政策与版本。人工分类优先，可明确切回自动模式。
 - 市场设置：扩展国家、当地语言关键词、启停和采集周期。
 - 任务中心：持久队列、进度、错误、有限重试、手动重试与重启恢复。
 - 管理员认证：HttpOnly 签名会话、服务端撤销、来源检查和登录限速。
@@ -56,13 +57,15 @@ NODE_ENV=production npm start
 
 **Google Play 的安装量是商店公开累计指标，不能当作某个国家的日下载量。App Store 不公开下载量，保持空值。** 不会用评分人数估算下载量，也不会用零代替未知。
 
-关键词搜索形成候选集合，不能保证全市场覆盖；人工确认后才归入已确认信贷。评价来自有限的公开返回窗口：Google Play 默认最新 100 条，App Store 第 1 页。国家和语言代表采集上下文，不能证明用户所在地；App Store 评论实际语言标为未验证。失败不会被自动解释为下架。
+关键词搜索形成候选集合，不能保证全市场覆盖。新应用在有信贷服务意图和至少两类独立数值披露时自动归入已确认信贷；弱证据保持待确认。纯计算器与指南不能仅凭示例数字确认为信贷服务。识别分数不是概率，披露命中不是合规、公司或牌照认证。V0.1 历史分类均锁定保留，可由管理员明确启用自动分类。评价来自有限的公开返回窗口：Google Play 默认最新 100 条，App Store 第 1 页。国家和语言代表采集上下文，不能证明用户所在地；App Store 评论实际语言标为未验证。失败不会被自动解释为下架。
 
-采集库接口说明：[google-play-scraper](https://github.com/facundoolano/google-play-scraper)、[app-store-scraper](https://github.com/facundoolano/app-store-scraper)。
+采集库：[MrAdex77/google-play-scraper](https://github.com/MrAdex77/google-play-scraper) → `@mradex77/google-play-scraper@1.1.0`；[plahteenlahti/app-store-scraper](https://github.com/plahteenlahti/app-store-scraper) → `@perttu/app-store-scraper@2.1.0`。已移除旧库和 request/uuid 依赖链。
+
+[政策来源](docs/policy-sources.md) 单独版本化。泰国与菲律宾的描述披露要求分别处理；印尼与巴基斯坦的材料要求不推断为已验证牌照；墨西哥与阿根廷不套用其他国家规则。Google Play 披露规则不作为 App Store 义务。权限来自公开商店声明，并非已授予权限或 APK 静态分析。补充接口失败时保留最近成功数据、时间与真实错误；旧版未采到的字段只能通过后续采集补齐。
 
 ## 数据库与 AI 查询
 
-SQLite WAL + 明确 SQL 迁移，规范字段和原始 JSON 并存。表名：`countries`、`apps`、`snapshots`、`changes`、`reviews`、`jobs`、`schedule_state`。国家/商店/应用 ID 的唯一约束和快照来源关系便于 AI 直接通过 SQL 分析及追溯。
+SQLite WAL + 明确 SQL 迁移，规范字段和原始 JSON 并存。表名：`countries`、`apps`、`snapshots`、`changes`、`reviews`、`jobs`、`schedule_state`、`discovery_observations`、`enrichments`、`enrichment_history`。国家/商店/应用 ID 的唯一约束和快照来源关系便于 AI 直接通过 SQL 分析及追溯。
 
 [架构与 SQL 示例](docs/architecture.md) 包含数据模型、采集节奏、备份和后续迁移 PostgreSQL 的边界；[API 文档](docs/api.md) 描述所有接口。优先对只读副本做分析，避免 AI 查询阻塞工作库。需要安全备份时停止唯一服务，再复制主文件及存在的 WAL/SHM 文件；不停机请使用 SQLite online backup，不能只复制正在写入的主文件。
 
@@ -86,4 +89,6 @@ CEO 负责调度和最终交付；PM 编写需求与验收标准；CTO 实现并
 | `npm run check` | 类型检查、测试和生产构建 |
 | `npm start` | 启动生产构建 |
 
-若商店采集失败，先在任务详情查看错误，再检查网络、国家配置与上游接口。App Store 依赖含遗留 `request`：已覆写修复可兼容的高危传递依赖，并禁止重定向；剩余审计项和真实调用验证见验收报告。不要运行 `npm audit fix --force` 自动降级用户指定采集库。
+若商店采集失败，先在任务详情查看错误，再检查网络、国家配置与上游接口。不要运行 `npm audit fix --force` 自动降级用户指定采集库。
+
+V0.2 需求与验收：[需求 #7](https://github.com/zequnjiang/appeye/issues/7)、[依赖迁移 #5](https://github.com/zequnjiang/appeye/issues/5)、[完整信息 #8](https://github.com/zequnjiang/appeye/issues/8)、[信贷识别 #9](https://github.com/zequnjiang/appeye/issues/9)。范围及验收标准见 [V0.2 需求](docs/requirements/V0.2.md)。

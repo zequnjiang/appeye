@@ -1,5 +1,6 @@
 import type { Store } from './db.js';
-import type { Job, Providers } from './types.js';
+import { enrichmentKinds, type Job, type Providers } from './types.js';
+import { enrichmentContext } from './providers.js';
 
 export interface WorkerOptions {
   store: Store;
@@ -54,14 +55,23 @@ export function createWorker(options: WorkerOptions) {
             provider.search({ ...context, keyword, signal }),
           );
           for (const data of results) {
-            if (seen.has(data.externalId)) continue;
-            seen.add(data.externalId);
             const app = store.createApp({
               store: job.store,
               externalId: data.externalId,
               country: job.country,
               sourceKeyword: keyword,
               data,
+            });
+            store.recordDiscovery(app.id, {
+              keyword,
+              requestCountry: country.code,
+              requestLanguage: country.language,
+              source:
+                job.store === 'google-play'
+                  ? `https://play.google.com/store/search?c=apps&q=${encodeURIComponent(keyword)}&gl=${country.code}&hl=${country.language}`
+                  : `https://itunes.apple.com/search?term=${encodeURIComponent(keyword)}&country=${country.code}&lang=${country.language}`,
+              data,
+              raw: data.raw ?? data,
             });
             if (app.classification !== 'excluded')
               store.enqueueJob({
@@ -71,7 +81,10 @@ export function createWorker(options: WorkerOptions) {
                 appId: app.id,
                 maxAttempts: options.maxAttempts,
               });
-            found++;
+            if (!seen.has(data.externalId)) {
+              seen.add(data.externalId);
+              found++;
+            }
           }
         } catch (error) {
           errors.push(`${keyword}: ${error instanceof Error ? error.message : String(error)}`);
@@ -103,7 +116,48 @@ export function createWorker(options: WorkerOptions) {
         appId: app.id,
         maxAttempts: options.maxAttempts,
       });
+      store.enqueueJob({
+        type: 'enrich',
+        country: app.country,
+        store: app.store,
+        appId: app.id,
+        maxAttempts: options.maxAttempts,
+      });
       return { appId: app.id, snapshotId: snapshot.id };
+    }
+    if (job.type === 'enrich') {
+      const errors: string[] = [];
+      const results: Record<string, string> = {};
+      for (const kind of enrichmentKinds) {
+        const input = {
+          ...context,
+          externalId: app.externalId,
+          developerId: app.developerId,
+          kind,
+        };
+        store.updateJobProgress(job.id, `补充商店信息：${kind}`);
+        try {
+          const result = provider.enrich
+            ? await request((signal) => provider.enrich!({ ...input, signal }))
+            : {
+                ...enrichmentContext(job.store, input),
+                status: 'unsupported' as const,
+                data: null,
+                raw: null,
+                note: '当前适配器未实现补充信息方法',
+              };
+          store.saveEnrichment(app.id, kind, result);
+          results[kind] = result.status;
+        } catch (error) {
+          const message = (error instanceof Error ? error.message : String(error)).slice(0, 4000);
+          store.failEnrichment(app.id, kind, message, enrichmentContext(job.store, input));
+          results[kind] = 'failed';
+          errors.push(`${kind}: ${message}`);
+        }
+      }
+      if (errors.length)
+        throw new Error(`补充信息部分失败（其余结果已保存）：${errors.join('；')}`);
+      return { appId: app.id, enrichments: results };
     }
     store.updateJobProgress(job.id, `采集最新评论：${app.title}`);
     const reviews = await request((signal) =>
@@ -135,7 +189,7 @@ export function createWorker(options: WorkerOptions) {
         store.completeJob(job.id, await execute(job));
       } catch (error) {
         const message = (error instanceof Error ? error.message : String(error)).slice(0, 4000);
-        if (job.appId) store.setAppError(job.appId, message);
+        if (job.appId && job.type !== 'enrich') store.setAppError(job.appId, message);
         store.failJob(
           job.id,
           message,

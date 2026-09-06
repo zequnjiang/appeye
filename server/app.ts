@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import type { Store } from './db.js';
-import type { Providers, StoreName } from './types.js';
+import { enrichmentKinds, type Providers, type StoreName } from './types.js';
 import type { Worker } from './worker.js';
 
 export const limitations = [
@@ -40,6 +40,7 @@ const filterSchema = pageSchema.extend({
     .optional(),
   store: storeName.optional(),
   classification: classification.optional(),
+  loanVerdict: z.enum(['strong', 'possible', 'insufficient']).optional(),
   q: z.string().max(200).optional(),
 });
 class HttpError extends Error {
@@ -239,6 +240,9 @@ export function createApp(options: AppOptions) {
     const id = appId(req);
     res.json({
       app: store.getApp(id),
+      rawDetail: store.getRawDetail(id),
+      enrichments: store.listEnrichments(id),
+      discoveries: store.listDiscoveries(id, 20).discoveries,
       snapshots: store.listSnapshots(id, 50).snapshots,
       changes: store.listChanges({ appId: id, limit: 100 }).changes,
       reviews: store.listReviews(id, { limit: 50 }).reviews,
@@ -247,8 +251,33 @@ export function createApp(options: AppOptions) {
   });
   app.patch('/api/apps/:id', (req, res) => {
     const id = appId(req);
-    const input = z.object({ classification }).strict().parse(req.body);
-    res.json({ app: store.updateClassification(id, input.classification) });
+    const input = z
+      .union([
+        z.object({ classification }).strict(),
+        z.object({ classificationMode: z.literal('auto') }).strict(),
+        z.object({ mode: z.literal('auto') }).strict(),
+      ])
+      .parse(req.body);
+    res.json({
+      app:
+        'classification' in input
+          ? store.updateClassification(id, input.classification)
+          : store.setClassificationMode(id, 'auto'),
+    });
+  });
+  app.get('/api/apps/:id/discoveries', (req, res) => {
+    const id = appId(req);
+    const page = pageSchema.parse(req.query);
+    res.json(store.listDiscoveries(id, page.limit, page.offset));
+  });
+  app.get('/api/apps/:id/enrichments', (req, res) =>
+    res.json({ enrichments: store.listEnrichments(appId(req)) }),
+  );
+  app.get('/api/apps/:id/enrichments/:kind/history', (req, res) => {
+    const id = appId(req);
+    const kind = z.enum(enrichmentKinds).parse(req.params.kind);
+    const page = pageSchema.parse(req.query);
+    res.json(store.listEnrichmentHistory(id, kind, page.limit, page.offset));
   });
   app.get('/api/apps/:id/snapshots', (req, res) => {
     const id = appId(req),
@@ -287,7 +316,7 @@ export function createApp(options: AppOptions) {
         pageSchema
           .extend({
             status: z.enum(['queued', 'running', 'succeeded', 'failed']).optional(),
-            type: z.enum(['discover', 'refresh', 'reviews']).optional(),
+            type: z.enum(['discover', 'refresh', 'reviews', 'enrich']).optional(),
             country: z
               .string()
               .regex(/^[a-z]{2}$/)
@@ -301,7 +330,7 @@ export function createApp(options: AppOptions) {
     liveOnly();
     const input = z
       .object({
-        type: z.enum(['discover', 'refresh', 'reviews']),
+        type: z.enum(['discover', 'refresh', 'reviews', 'enrich']),
         country: z
           .string()
           .regex(/^[a-z]{2}$/)

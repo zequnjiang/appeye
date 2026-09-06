@@ -2,9 +2,9 @@
 
 ## 产品与技术边界
 
-这是面向信贷行业的 Google Play / App Store 市场监测后台。首版使用 Node.js 24+、TypeScript、Express、React/Vite 和内置 `node:sqlite`。采集使用用户指定的 `google-play-scraper` 与 `app-store-scraper`。
+这是面向信贷行业的 Google Play / App Store 市场监测后台。首版使用 Node.js 24+、TypeScript、Express、React/Vite 和内置 `node:sqlite`。采集使用用户指定仓库对应的 `@mradex77/google-play-scraper` 与 `@perttu/app-store-scraper`。
 
-先阅读 [首版需求](docs/requirements/MVP.md) 和 [工作流](docs/workflow.md)，再修改对应功能。需求、缺陷、实现和验收通过 [GitHub](https://github.com/zequnjiang/appeye) 跟踪。
+先阅读 [V0.2 需求](docs/requirements/V0.2.md)、[首版需求](docs/requirements/MVP.md) 和 [工作流](docs/workflow.md)，再修改对应功能。需求、缺陷、实现和验收通过 [GitHub](https://github.com/zequnjiang/appeye) 跟踪。
 
 ## 角色
 
@@ -23,7 +23,7 @@
 - 保留真实采集错误和数据来源，缺失数值用 `null`，不能制造市场数据。
 - `(country, store, storeAppId)` 为跟踪身份；首次发现不等于新上架，观测版本频率不等于全部发布历史。
 - GP 安装为公开累计指标，不能标成国别日下载；App Store 不公开的下载量保持缺失。
-- 评论是采集样本，请求国家/语言不等于用户所在地；信贷分类由人工确认，不推断牌照合法性。
+- 评论是采集样本，请求国家/语言不等于用户所在地；信贷识别可由描述规则自动确认，原始证据、规则版本和分析时间必须保存；人工分类优先，旧数据保留为 legacy，不推断牌照合法性。
 - 演示模式明显标识并与真实数据隔离；禁止采集失败后静默使用演示数据。
 - 不提交管理员密码、会话密钥或本地真实数据库；环境变量示例使用占位值。
 
