@@ -105,6 +105,9 @@ export function ensureFullScanSchema(store: Store) {
     CREATE INDEX IF NOT EXISTS full_scan_http_batch ON full_scan_http(batch_id);
     CREATE INDEX IF NOT EXISTS full_scan_source_identity ON full_scan_sources(batch_id,country,store,external_id,discovery_id);
     CREATE INDEX IF NOT EXISTS full_scan_app_pages ON full_scan_tasks(batch_id,app_id,kind,page,status);
+    CREATE INDEX IF NOT EXISTS full_scan_summary_covering ON full_scan_tasks(
+      batch_id,kind,status,stop_reason,json_extract(result,'$.added'),json_extract(result,'$.updated')
+    );
   `);
 }
 

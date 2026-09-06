@@ -419,7 +419,7 @@ test('#15: failure while storing the applied-response marker rolls back both new
           () => {
             h.store.run(
               'UPDATE full_scan_tasks SET result=? WHERE id=?',
-              'synthetic-marker',
+              JSON.stringify({ syntheticMarker: true }),
               task.id,
             );
             throw new Error('Synthetic interrupted transaction');
