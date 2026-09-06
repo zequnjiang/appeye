@@ -140,6 +140,8 @@ Alex核对原474的身份、classification/source/override、firstSeen等所有�
 
 ## 7. 最终报告待补证据
 
+第二项运行中发现的[开发者目录续页缺陷#13](https://github.com/zequnjiang/appeye/issues/13)已独立闭环：修复提交`7f6ea70`经99项工程回归、原响应离线重放和runtime-3真实恢复核查，task602目录从20项补齐33项，旧历史/原HTTP保留，新时间与来源关联准确；[PM缺陷验收](DEVELOPER-CONTINUATION-PM.md)允许最终CI通过后关闭该缺陷。此修复不改变第一项验收，也不代表第二项整体完成。
+
 以下未完成项由实际执行和独立测试补齐，不能以预计值填入：
 
 - 最终执行结束时间、代码提交与规则版本；中断、恢复和原运行设置恢复记录。
