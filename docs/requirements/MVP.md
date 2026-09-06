@@ -1,10 +1,11 @@
 # Appeye 首版产品需求
 
-- 状态：PM Ready（实现完成后由 Alex 测试，再由 PM 验收）
+- 状态：PM 最终功能验收通过；GitHub 最终交付关卡见 [PM 验收报告](../reports/PM-ACCEPTANCE.md)。
 - 版本：MVP 1.0
 - 需求日期：2026-09-07
 - GitHub 仓库：[zequnjiang/appeye](https://github.com/zequnjiang/appeye)
 - GitHub 跟踪：[需求 #1](https://github.com/zequnjiang/appeye/issues/1)、[数据采集后端 #2](https://github.com/zequnjiang/appeye/issues/2)、[管理后台 #3](https://github.com/zequnjiang/appeye/issues/3)、[回归与验收 #4](https://github.com/zequnjiang/appeye/issues/4)。流转见 [工作流](../workflow.md)。
+- 实现：[PR #6](https://github.com/zequnjiang/appeye/pull/6)；测试：[Alex 正式报告](../reports/ALEX-TEST-REPORT.md)。
 
 ## 1. 产品目标
 

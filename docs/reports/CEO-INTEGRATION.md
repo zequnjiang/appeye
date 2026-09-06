@@ -28,3 +28,11 @@ Alex 的浏览器交互、移动端检查与独立回归见 [Alex 报告](ALEX-T
 首版是可运行、可扩展的单主机监测后台，不是 diandian.com 全量数据替代。没有云服务器部署，没有虚构历史，没有 App Store 下载量估算，也不判断应用牌照是否合法。长期采集需要持续运行 Node 服务；本地样本覆盖仅用于证明链路与提供初始候选。
 
 最终是否通过由 PM 报告决定。GitHub Actions 的 Node.js 24 环境结果以 PR 检查为准，本地运行使用 Node.js v25.9.0。
+
+## 最后集成修正
+
+关闭开发服务时发现历史 HMR 日志包含重复 `createRoot`。将业务组件移到 `src/App.tsx`，`src/main.tsx` 只负责一次挂载。业务逻辑未变化，生产 JS 产物哈希与修正前一致。修正后 CEO 与 Alex 分别执行 `npm run check`，均为 30/30 通过，类型/生产构建成功；Alex 另在 Chrome 实际追加/恢复临时注释验证 HMR，清理控制台后的复测无重复 root / removeChild 错误，登录态与页面保留，详见其补充记录。
+
+真实初始样本最终为 24 候选、24 快照、367 条去重评论、60 任务全部成功。本地已切换编译后的正式服务（127.0.0.1:3000），`.env` 启用 `AUTO_SCHEDULE=true`，随后按国家配置开始持续发现与采集，因此实时数量可能继续增长。初始样本报告只描述该次有限采样，不能当作完整市场规模。
+
+实施基线 GitHub Actions Node24 验证：[run 34046042894](https://github.com/zequnjiang/appeye/actions/runs/34046042894) 成功。最终 PR 的检查、PM 报告发布与合并证据在 [PR #6](https://github.com/zequnjiang/appeye/pull/6) / [验收 Issue #4](https://github.com/zequnjiang/appeye/issues/4) 留档。
