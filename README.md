@@ -81,6 +81,8 @@ FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-20
 
 同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项，`--retry-warnings` 仅重试原始响应可被已验证布局适配恢复的 Google Play 开发者目录告警，保留原尝试和数据历史。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。批次结束后，用 `NODE_ENV=production npm start` 恢复普通服务。
 
+`--retry-developer-source-errors` 是单独的显式恢复入口：仅对本批次已保存的最后一次续页满足 HTTP 200、`qnKhOb` 空 payload、`PlayDataError` code 5 的 Google Play 部分开发者目录开启一轮恢复。任务保存本轮标识、原因、旧 HTTP 引用与累计尝试序号；重复启动同一开关不会自动开启第二轮。若再次取得部分目录和同一来源错误，保留 `developer-degraded` 告警并结束本轮；网络异常仍使用既有有限重试预算。这不是对上游 code 5 的修复，也不保证获得完整目录，不扩大 `--retry-warnings` 的原范围。
+
 ```bash
 npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --status
 npx tsx scripts/full-scan-audit.ts --batch-id finance-2026-09-07 --baseline data/batches/finance-2026-09-07-baseline.json --output data/batches/finance-2026-09-07-audit.json

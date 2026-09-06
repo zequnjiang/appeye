@@ -1,7 +1,10 @@
 import { randomUUID, createHash } from 'node:crypto';
 import type { Store } from './db.js';
 import { classifyLoan } from './loan-identification.js';
-import { normalizeDeveloperContinuation } from './developer-continuation.js';
+import {
+  normalizeDeveloperContinuation,
+  parseDeveloperSourceError,
+} from './developer-continuation.js';
 import {
   decodeGoogleDeveloperId,
   googleDeveloperRequestUrl,
@@ -99,6 +102,7 @@ export function ensureFullScanSchema(store: Store) {
     CREATE TABLE IF NOT EXISTS full_scan_responses (
       id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, attempt_id INTEGER NOT NULL, observed_at TEXT NOT NULL, response TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS full_scan_http_batch ON full_scan_http(batch_id);
     CREATE INDEX IF NOT EXISTS full_scan_source_identity ON full_scan_sources(batch_id,country,store,external_id,discovery_id);
     CREATE INDEX IF NOT EXISTS full_scan_app_pages ON full_scan_tasks(batch_id,app_id,kind,page,status);
   `);
@@ -233,6 +237,55 @@ export function createFullScanRunner(options: {
       page: 1,
     });
   }
+  function retryDeveloperSourceErrors(): number {
+    const sourceHttpIds = new Map<number, number>();
+    const tasks = store
+      .all(
+        "SELECT * FROM full_scan_tasks WHERE batch_id=? AND store='google-play' AND kind='enrich' AND json_extract(payload,'$.kind')='developer' AND status='succeeded' AND stop_reason='developer-degraded'",
+        batchId,
+      )
+      .filter((task) => {
+        const payload = JSON.parse(task.payload);
+        if (payload.developerSourceErrorRecovery) return false;
+        const response = task.response ? JSON.parse(task.response) : null;
+        if (
+          !Array.isArray(response?.raw?.warnings) ||
+          !response.raw.warnings.some(
+            (warning: any) =>
+              warning.context === 'developer' && warning.reason === 'cluster-page-parse',
+          )
+        )
+          return false;
+        const record = store.one(
+          "SELECT id,status,url,body FROM full_scan_http WHERE batch_id=? AND task_id=? AND url LIKE '%rpcids=qnKhOb%' ORDER BY id DESC LIMIT 1",
+          batchId,
+          task.id,
+        );
+        if (record?.status !== 200 || typeof record.body !== 'string') return false;
+        try {
+          const url = new URL(record.url);
+          if (
+            url.origin !== 'https://play.google.com' ||
+            url.username ||
+            url.password ||
+            url.pathname !== '/_/PlayStoreUi/data/batchexecute' ||
+            url.searchParams.getAll('rpcids').length !== 1 ||
+            url.searchParams.get('rpcids') !== 'qnKhOb' ||
+            url.searchParams.getAll('gl').length !== 1 ||
+            url.searchParams.get('gl') !== task.country ||
+            url.searchParams.getAll('hl').length !== 1 ||
+            url.searchParams.get('hl') !== (payload.requestLanguage ?? language(task.country))
+          )
+            return false;
+        } catch {
+          return false;
+        }
+        if (!parseDeveloperSourceError(record.body)) return false;
+        sourceHttpIds.set(task.id, record.id);
+        return true;
+      });
+    return requeueDeveloperTasks(tasks, sourceHttpIds);
+  }
   function seed() {
     if (store.one('SELECT seeded FROM full_scan_runs WHERE id=?', batchId)?.seeded) return;
     store.transaction(() => {
@@ -340,6 +393,12 @@ export function createFullScanRunner(options: {
           !!normalizeDeveloperContinuation(record.body).adaptation
         );
       });
+    return requeueDeveloperTasks(tasks);
+  }
+  function requeueDeveloperTasks(
+    tasks: ReturnType<Store['all']>,
+    sourceHttpIds?: Map<number, number>,
+  ): number {
     store.transaction(() => {
       for (const task of tasks) {
         if (
@@ -364,7 +423,21 @@ export function createFullScanRunner(options: {
             task.response,
           );
         }
-        const payload = { ...JSON.parse(task.payload), recoveryAttemptBase: task.attempts };
+        const payload = {
+          ...JSON.parse(task.payload),
+          recoveryAttemptBase: task.attempts,
+          ...(sourceHttpIds?.has(task.id)
+            ? {
+                developerSourceErrorRecovery: {
+                  reason: 'google-play-developer-rpc-5',
+                  round: 1,
+                  sourceHttpId: sourceHttpIds.get(task.id),
+                  previousResponseAt: task.response_at,
+                  queuedAt: time(),
+                },
+              }
+            : {}),
+        };
         store.run(
           "UPDATE full_scan_tasks SET status='queued',next_run_at=?,finished_at=NULL,response=NULL,response_at=NULL,result=NULL,error=NULL,payload=? WHERE id=?",
           time(),
@@ -534,6 +607,7 @@ export function createFullScanRunner(options: {
     task: ScanTask,
     response: any,
     observedAt: string,
+    responseId: number,
   ): { result: unknown; stopReason?: string } {
     const payload = JSON.parse(task.payload);
     if (task.kind === 'list' || task.kind === 'search') {
@@ -673,21 +747,22 @@ export function createFullScanRunner(options: {
       };
     }
     if (task.kind === 'enrich') {
-      if (
-        !store.one(
-          'SELECT id FROM enrichment_history WHERE app_id=? AND kind=? AND fetched_at=? LIMIT 1',
-          task.app_id!,
-          payload.kind,
-          observedAt,
-        )
-      )
-        store.saveEnrichment(task.app_id!, payload.kind, response, observedAt);
+      const result = {
+        kind: payload.kind,
+        status: response.status,
+        warnings: response.raw?.warnings ?? [],
+        appliedResponseId: responseId,
+      };
+      const previousResult = store.one(
+        'SELECT result FROM full_scan_tasks WHERE id=?',
+        task.id,
+      )?.result;
+      if (!previousResult || JSON.parse(previousResult).appliedResponseId !== responseId)
+        store.saveEnrichment(task.app_id!, payload.kind, response, observedAt, () => {
+          store.run('UPDATE full_scan_tasks SET result=? WHERE id=?', json(result), task.id);
+        });
       return {
-        result: {
-          kind: payload.kind,
-          status: response.status,
-          warnings: response.raw?.warnings ?? [],
-        },
+        result,
         stopReason:
           response.status === 'unsupported'
             ? 'unsupported'
@@ -914,14 +989,26 @@ export function createFullScanRunner(options: {
           : time());
       if (!Number.isFinite(Date.parse(observedAt)))
         throw new Error('Invalid source observation time');
+      const cachedResponse = task.response
+        ? store.one(
+            'SELECT id FROM full_scan_responses WHERE task_id=? AND observed_at=? AND response=? ORDER BY id DESC LIMIT 1',
+            task.id,
+            observedAt,
+            json(response),
+          )
+        : undefined;
+      const responseId = cachedResponse
+        ? cachedResponse.id
+        : Number(
+            store.run(
+              'INSERT INTO full_scan_responses(task_id,attempt_id,observed_at,response) VALUES (?,?,?,?)',
+              task.id,
+              attempt,
+              observedAt,
+              json(response),
+            ).lastInsertRowid,
+          );
       if (!task.response) {
-        store.run(
-          'INSERT INTO full_scan_responses(task_id,attempt_id,observed_at,response) VALUES (?,?,?,?)',
-          task.id,
-          attempt,
-          observedAt,
-          json(response),
-        );
         store.run(
           'UPDATE full_scan_tasks SET response=?,response_at=? WHERE id=?',
           json(response),
@@ -929,7 +1016,7 @@ export function createFullScanRunner(options: {
           task.id,
         );
       }
-      const applied = applyTask(task, response, observedAt);
+      const applied = applyTask(task, response, observedAt, responseId);
       store.run(
         "UPDATE full_scan_tasks SET status='succeeded',result=?,stop_reason=?,finished_at=?,error=NULL WHERE id=?",
         json(applied.result),
@@ -1019,6 +1106,7 @@ export function createFullScanRunner(options: {
     recover,
     retryFailed,
     retryDeveloperWarnings,
+    retryDeveloperSourceErrors,
     recordHttp,
     summary,
     runOnce,

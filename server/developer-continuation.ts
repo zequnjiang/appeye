@@ -13,6 +13,43 @@ export interface DeveloperContinuationAdaptation {
   toPath: '0.6';
 }
 
+const PLAY_DATA_ERROR =
+  'type.googleapis.com/wireless.android.finsky.boq.web.data.store.error.PlayDataError';
+
+/** Recognize only the observed upstream rejection; a missing payload alone is not evidence. */
+export function parseDeveloperSourceError(body: string): {
+  code: 5;
+  type: typeof PLAY_DATA_ERROR;
+} | null {
+  const start = body.indexOf('[');
+  if (start < 0) return null;
+  const remainder = body.slice(start);
+  for (const candidate of [...remainder.split('\n'), remainder]) {
+    let frames: unknown;
+    try {
+      frames = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(frames)) continue;
+    const matches = frames.filter(
+      (frame) => Array.isArray(frame) && frame[0] === 'wrb.fr' && frame[1] === 'qnKhOb',
+    );
+    if (!matches.length) continue;
+    if (matches.length !== 1) return null;
+    const frame = matches[0];
+    const error = frame[5];
+    return frame[2] === null &&
+      Array.isArray(error) &&
+      error[0] === 5 &&
+      Array.isArray(error[2]) &&
+      error[2].some((detail: unknown) => Array.isArray(detail) && detail[0] === PLAY_DATA_ERROR)
+      ? { code: 5, type: PLAY_DATA_ERROR }
+      : null;
+  }
+  return null;
+}
+
 function at(value: unknown, path: number[]): unknown {
   let item = value;
   for (const index of path) {

@@ -429,7 +429,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
                 }
               : {}),
           },
-          note: `${provenance.note} ${store === 'google-play' ? `目录沿库内部公开游标读取至自然结束；无本地20项截断，异常/令牌循环会记录 warnings。${verifiedDeveloperUrl ? ' 目录路径取自本批次已保存应用详情中的同ID官方链接。' : ' 未取得可靠的同ID listing 目录链接；沿用库默认路径选择，404不能单独证明开发者目录已下架。'}` : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}${compatibility.length ? ` ${compatibility.length} 次已校验的续页布局适配；真实原HTTP保留，转换仅作为库的解析输入。` : ''}`,
+          note: `${provenance.note} ${store === 'google-play' ? `目录沿公开游标尝试续页；无本地20项截断，异常/令牌循环会记录 warnings，存在告警时不视为完整目录。${verifiedDeveloperUrl ? ' 目录路径取自本批次已保存应用详情中的同ID官方链接。' : ' 未取得可靠的同ID listing 目录链接；沿用库默认路径选择，404不能单独证明开发者目录已下架。'}` : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}${compatibility.length ? ` ${compatibility.length} 次已校验的续页布局适配；真实原HTTP保留，转换仅作为库的解析输入。` : ''}`,
         };
       },
       async list(input) {

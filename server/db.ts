@@ -447,6 +447,7 @@ export class Store {
     kind: EnrichmentKind,
     result: EnrichmentResult,
     attemptedAt = now(),
+    onSaved?: () => void,
   ): Enrichment {
     if (!this.getApp(appId)) throw new Error('App not found');
     const success = result.status === 'available' || result.status === 'empty';
@@ -483,6 +484,8 @@ export class Store {
         null,
         result.note ?? null,
       );
+      // The batch ledger can mark this exact response applied in the same transaction.
+      onSaved?.();
       return this.listEnrichments(appId).find((r) => r.kind === kind)!;
     });
   }

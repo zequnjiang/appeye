@@ -30,6 +30,8 @@ npx tsx scripts/full-scan.ts --batch-id finance-YYYY-MM-DD --status
   --status                Read-only status; does not migrate, create, seed or fetch anything
   --retry-failed          Requeue failed tasks in this batch; successful tasks remain untouched
   --retry-warnings        Explicitly retry only Google developer-degraded tasks, preserving old evidence
+  --retry-developer-source-errors  One marked recovery round for verified Google developer RPC code 5
+                                  Repeated partial results keep their warning; no completeness guarantee
   --serve                 Serve the authenticated existing dashboard with no ordinary worker
   --port 3000             Dashboard port; host defaults to HOST or 127.0.0.1
   --database PATH         Defaults to DATABASE_PATH or data/appeye.sqlite
@@ -132,6 +134,7 @@ export async function main(args = process.argv.slice(2)) {
       serve: { type: 'boolean' },
       'retry-failed': { type: 'boolean' },
       'retry-warnings': { type: 'boolean' },
+      'retry-developer-source-errors': { type: 'boolean' },
       'batch-id': { type: 'string' },
       database: { type: 'string' },
       countries: { type: 'string' },
@@ -249,6 +252,14 @@ export async function main(args = process.argv.slice(2)) {
           event: 'developer-warnings-requeued',
           batchId,
           count: runner.retryDeveloperWarnings(),
+        }),
+      );
+    if (values['retry-developer-source-errors'])
+      console.log(
+        JSON.stringify({
+          event: 'developer-source-errors-requeued',
+          batchId,
+          count: runner.retryDeveloperSourceErrors(),
         }),
       );
     mkdirSync(dirname(reportPath), { recursive: true });
