@@ -1,155 +1,232 @@
-import { createHash } from 'node:crypto';
-import googlePlay from 'google-play-scraper';
-import appStore from 'app-store-scraper';
-import type { NormalizedApp, NormalizedReview, Providers, StoreName } from './types.js';
-const text = (value: unknown): string | null =>
-  value === undefined || value === null || value === '' ? null : String(value);
-const number = (value: unknown): number | null =>
-  value === undefined || value === null || value === '' || !Number.isFinite(Number(value))
-    ? null
-    : Number(value);
-const date = (value: unknown): string | null => {
-  if (!value) return null;
-  const d = new Date(value as string | number);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-};
-export function normalizeApp(raw: Record<string, any>, store: StoreName): NormalizedApp {
-  const externalId = text(store === 'google-play' ? raw.appId : raw.id);
-  if (!externalId || !text(raw.title))
-    throw new Error('商店返回的数据缺少应用 ID 或名称，可能是采集接口发生变化');
+import googlePlay from '@mradex77/google-play-scraper';
+import * as appStore from '@perttu/app-store-scraper';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { normalizeApp, normalizeReview } from './normalization.js';
+import type {
+  EnrichmentContext,
+  EnrichmentKind,
+  ProviderContext,
+  Providers,
+  StoreName,
+} from './types.js';
+export { normalizeApp, normalizeReview } from './normalization.js';
+
+// A narrow injection boundary keeps adapter tests independent from the network and upstream typings.
+export interface ScraperClient {
+  app(options: any): Promise<any>;
+  search(options: any): Promise<any>;
+  reviews(options: any): Promise<any>;
+  permissions?(options: any): Promise<any>;
+  dataSafety?(options: any): Promise<any>;
+  privacy?(options: any): Promise<any>;
+  versionHistory?(options: any): Promise<any>;
+  inAppPurchases?(options: any): Promise<any>;
+  ratings?(options: any): Promise<any>;
+  developer?(options: any): Promise<any>;
+}
+export interface ProviderOptions {
+  timeoutMs?: number;
+  searchLimit?: number;
+  reviewLimit?: number;
+  requestDelayMs?: number;
+  fetchImpl?: typeof fetch;
+  googlePlayClient?: ScraperClient;
+  appStoreClient?: ScraperClient;
+}
+function googleDeveloperId(value: string): string {
+  // App details expose the developer URL query value; URLSearchParams in the new client encodes it again.
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '));
+  } catch {
+    return value;
+  }
+}
+export function enrichmentContext(
+  store: StoreName,
+  input: ProviderContext & {
+    externalId: string;
+    kind: EnrichmentKind;
+    developerId?: string | null;
+  },
+): EnrichmentContext {
+  let source =
+    store === 'google-play'
+      ? `https://play.google.com/store/apps/${input.kind === 'dataSafety' ? 'datasafety' : 'details'}?id=${encodeURIComponent(input.externalId)}&hl=${encodeURIComponent(input.language)}${input.kind === 'dataSafety' ? '' : `&gl=${input.country}`}`
+      : `https://apps.apple.com/${input.country}/app/id${encodeURIComponent(input.externalId)}`;
+  if (input.kind === 'developer' && input.developerId) {
+    const developerId =
+      store === 'google-play' ? googleDeveloperId(input.developerId) : input.developerId;
+    source =
+      store === 'google-play'
+        ? `https://play.google.com/store/apps/${/^\d+$/.test(developerId) ? 'dev' : 'developer'}?${new URLSearchParams({ id: developerId, gl: input.country, hl: input.language })}`
+        : `https://itunes.apple.com/lookup?${new URLSearchParams({ id: developerId, entity: 'software', country: input.country })}`;
+  } else if (store === 'app-store' && input.kind === 'ratings') {
+    source = `https://itunes.apple.com/${input.country}/customer-reviews/id${input.externalId}?displayable-kind=11`;
+  }
   return {
-    externalId,
-    title: String(raw.title),
-    developer: text(raw.developer),
-    icon: text(raw.icon),
-    url: text(raw.url),
-    summary: text(raw.summary),
-    description: text(raw.description),
-    version: text(raw.version),
-    score: number(raw.score),
-    ratings: number(raw.ratings ?? (store === 'app-store' ? raw.reviews : null)),
-    reviewCount: store === 'google-play' ? number(raw.reviews) : null,
-    bundleId: store === 'app-store' ? text(raw.appId) : null,
-    price: number(raw.price),
-    currency: text(raw.currency),
-    installs: store === 'google-play' ? text(raw.installs) : null,
-    minInstalls: store === 'google-play' ? number(raw.minInstalls) : null,
-    maxInstalls: store === 'google-play' ? number(raw.maxInstalls) : null,
-    releaseNotes: text(raw.recentChanges ?? raw.releaseNotes),
-    releasedAt: date(raw.released),
-    storeUpdatedAt: date(raw.updated),
-    genre: text(raw.genre),
-    developerWebsite: text(raw.developerWebsite),
-    privacyPolicy: text(raw.privacyPolicy),
-    raw,
+    source,
+    requestCountry: store === 'google-play' && input.kind === 'dataSafety' ? null : input.country,
+    requestLanguage: store === 'app-store' ? null : input.language,
+    note:
+      input.kind === 'permissions'
+        ? '商店声明/返回的权限；不是用户实际授权，也不是 APK Manifest 或运行时权限审计。'
+        : store === 'google-play' && input.kind === 'dataSafety'
+          ? 'Google Play 商店披露；此接口不发送国家参数，不能视为所选国家独有的数据安全声明。'
+          : '商店返回的披露或历史样本；空结果不证明没有相关数据，未进行设备权限或实际行为审计。',
   };
 }
-export function normalizeReview(raw: Record<string, any>, language: string): NormalizedReview {
-  const fallback = !text(raw.id);
-  const externalId =
-    text(raw.id) ??
-    `content:${createHash('sha256')
-      .update(
-        JSON.stringify([
-          raw.userName ?? null,
-          raw.title ?? null,
-          raw.text ?? null,
-          raw.score ?? null,
-          raw.version ?? null,
-          date(raw.date ?? raw.updated),
-        ]),
-      )
-      .digest('hex')}`;
-  return {
-    externalId,
-    userName: text(raw.userName),
-    title: text(raw.title),
-    text: text(raw.text) ?? '',
-    score: number(raw.score),
-    version: text(raw.version),
-    reviewedAt: date(raw.date ?? raw.updated),
-    replyText: text(raw.replyText),
-    language,
-    raw: fallback ? { ...raw, _appeye: { reviewIdSource: 'content-hash', originalId: null } } : raw,
-  };
+export function hasEnrichmentData(value: unknown): boolean {
+  if (value == null || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object')
+    return Object.values(value as Record<string, unknown>).some(hasEnrichmentData);
+  return true;
 }
-export function createProviders(
-  options: { timeoutMs?: number; searchLimit?: number; reviewLimit?: number } = {},
-): Providers {
-  const timeout = options.timeoutMs ?? 25000;
+export function createProviders(options: ProviderOptions = {}): Providers {
+  const gp = options.googlePlayClient ?? googlePlay;
+  const apple = options.appStoreClient ?? appStore;
+  const timeout = Math.min(options.timeoutMs ?? 25000, 120000);
   const searchLimit = options.searchLimit ?? 20;
-  return {
-    'google-play': {
-      async search({ country, language, keyword, signal }) {
-        const rows = await googlePlay.search({
-          term: keyword,
-          country,
-          lang: language,
-          num: searchLimit,
-          fullDetail: false,
-          requestOptions: { timeout: { request: timeout }, retry: { limit: 0 }, signal },
-        });
-        return rows.map((r: Record<string, any>) => normalizeApp(r, 'google-play'));
-      },
-      async app({ externalId, country, language, signal }) {
-        return normalizeApp(
-          await googlePlay.app({
-            appId: externalId,
-            country,
-            lang: language,
-            requestOptions: { timeout: { request: timeout }, retry: { limit: 0 }, signal },
-          }),
-          'google-play',
-        );
-      },
-      async reviews({ externalId, country, language, signal }) {
-        const result = await googlePlay.reviews({
-          appId: externalId,
-          country,
-          lang: language,
-          num: options.reviewLimit ?? 100,
-          sort: googlePlay.sort.NEWEST,
-          requestOptions: { timeout: { request: timeout }, retry: { limit: 0 }, signal },
-        });
-        return (Array.isArray(result) ? result : (result.data ?? [])).map(
-          (r: Record<string, any>) => normalizeReview(r, language),
-        );
-      },
-    },
-    'app-store': {
-      async search({ country, language, keyword }) {
-        const rows = await appStore.search({
-          term: keyword,
-          country,
-          lang: language,
-          num: searchLimit,
-          page: 1,
-          requestOptions: { timeout, followRedirect: false, followAllRedirects: false },
-        });
-        return rows.map((r: Record<string, any>) => normalizeApp(r, 'app-store'));
-      },
-      async app({ externalId, country, language }) {
-        return normalizeApp(
-          await appStore.app({
-            id: externalId,
-            country,
-            lang: language,
-            requestOptions: { timeout, followRedirect: false, followAllRedirects: false },
-          }),
-          'app-store',
-        );
-      },
-      // The upstream RSS API scopes reviews by storefront, not an actual language filter.
-      async reviews({ externalId, country }) {
-        const rows = await appStore.reviews({
-          id: externalId,
-          country,
-          page: 1,
-          sort: appStore.sort.RECENT,
-          requestOptions: { timeout, followRedirect: false, followAllRedirects: false },
-        });
-        return rows.map((r: Record<string, any>) => normalizeReview(r, 'und'));
-      },
-    },
+  const transport = options.fetchImpl ?? globalThis.fetch;
+  let lastHttpStart = 0;
+  let httpQueue: Promise<unknown> = Promise.resolve();
+  const pacedFetch: typeof fetch = (input, init) => {
+    const pending = httpQueue.then(async () => {
+      init?.signal?.throwIfAborted();
+      const wait = Math.max(0, (options.requestDelayMs ?? 1500) - (Date.now() - lastHttpStart));
+      if (wait) await sleep(wait, undefined, { signal: init?.signal ?? undefined });
+      init?.signal?.throwIfAborted();
+      lastHttpStart = Date.now();
+      return transport(input, init);
+    });
+    httpQueue = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
   };
+  const requestOptions = (
+    store: StoreName,
+    signal?: AbortSignal,
+    fetcher: typeof fetch = pacedFetch,
+  ) =>
+    store === 'google-play'
+      ? { timeoutMs: timeout, retries: 0, signal, fetchImpl: fetcher }
+      : { timeout, retries: 0, signal, fetch: fetcher };
+  const common = (store: StoreName, input: ProviderContext) => ({
+    country: input.country,
+    lang: input.language,
+    requestOptions: requestOptions(store, input.signal),
+  });
+  const adapter = (store: StoreName, client: ScraperClient) => ({
+    async search(input: ProviderContext & { keyword: string }) {
+      const rows = await client.search({
+        ...common(store, input),
+        term: input.keyword,
+        num: searchLimit,
+        ...(store === 'google-play' ? { fullDetail: false } : { page: 1 }),
+      });
+      if (!Array.isArray(rows)) throw new Error('商店搜索返回的结构不是应用列表');
+      return rows.map((row) => normalizeApp(row, store));
+    },
+    async app(input: ProviderContext & { externalId: string }) {
+      // Preserve original iTunes JSON fields (including sellerName) that the library's typed projection omits.
+      const responses: { url: string; status: number; body: unknown }[] = [];
+      const capturingFetch: typeof fetch = async (url, init) => {
+        const response = await pacedFetch(url, init);
+        if (
+          store === 'app-store' &&
+          (response.headers.get('content-type')?.includes('json') ||
+            /itunes\.apple\.com\/(lookup|search)\?/.test(String(url)))
+        ) {
+          const body = await response
+            .clone()
+            .json()
+            .catch(() => null);
+          if (body !== null) responses.push({ url: String(url), status: response.status, body });
+        }
+        return response;
+      };
+      const result = await client.app({
+        ...common(store, input),
+        ...(store === 'google-play' ? { appId: input.externalId } : { id: input.externalId }),
+        requestOptions: requestOptions(store, input.signal, capturingFetch),
+      });
+      let raw = result;
+      if (responses.length) {
+        const records = responses.flatMap((response) =>
+          Array.isArray((response.body as any)?.results) ? (response.body as any).results : [],
+        );
+        const original = records.find((record) => String(record.trackId) === input.externalId);
+        raw = {
+          ...result,
+          ...(original?.sellerName ? { sellerName: original.sellerName } : {}),
+          ...(original?.sellerUrl ? { sellerUrl: original.sellerUrl } : {}),
+          _appeyeTransport: responses,
+        };
+      }
+      return normalizeApp(raw, store);
+    },
+    async reviews(input: ProviderContext & { externalId: string }) {
+      const result = await client.reviews({
+        ...common(store, input),
+        ...(store === 'google-play'
+          ? {
+              appId: input.externalId,
+              num: options.reviewLimit ?? 100,
+              sort: googlePlay.sort.NEWEST,
+            }
+          : { id: input.externalId, page: 1, sort: appStore.sort.RECENT }),
+      });
+      const rows = Array.isArray(result) ? result : result?.data;
+      if (!Array.isArray(rows)) throw new Error('商店评论返回的结构不是评论列表');
+      return rows.map((row) =>
+        normalizeReview(row, store === 'google-play' ? input.language : 'und'),
+      );
+    },
+    async enrich(
+      input: ProviderContext & {
+        externalId: string;
+        kind: EnrichmentKind;
+        developerId?: string | null;
+      },
+    ) {
+      const context = enrichmentContext(store, input);
+      const supported =
+        store === 'google-play'
+          ? ['permissions', 'dataSafety', 'developer']
+          : ['privacy', 'versionHistory', 'inAppPurchases', 'ratings', 'developer'];
+      const method = client[input.kind];
+      if (!supported.includes(input.kind) || typeof method !== 'function')
+        return {
+          ...context,
+          status: 'unsupported' as const,
+          data: null,
+          raw: null,
+          note: `${context.note} 当前商店适配器不支持 ${input.kind}。`,
+        };
+      if (input.kind === 'developer' && !input.developerId)
+        throw new Error('应用详情缺少开发者 ID，未发起开发者目录请求');
+      const result = await method.call(client, {
+        ...common(store, input),
+        ...(input.kind === 'developer'
+          ? {
+              devId:
+                store === 'google-play' ? googleDeveloperId(input.developerId!) : input.developerId,
+              num: 20,
+              fullDetail: false,
+            }
+          : store === 'google-play'
+            ? { appId: input.externalId }
+            : { id: input.externalId }),
+      });
+      return {
+        ...context,
+        status: hasEnrichmentData(result) ? ('available' as const) : ('empty' as const),
+        data: result ?? null,
+        raw: result ?? null,
+      };
+    },
+  });
+  return { 'google-play': adapter('google-play', gp), 'app-store': adapter('app-store', apple) };
 }

@@ -1,0 +1,589 @@
+{
+  "schemaVersion": "1.0",
+  "version": "2026-09-07.1",
+  "retrievedAt": "2026-09-06T17:12:48.000Z",
+  "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+  "sources": [
+    {
+      "id": "google-play-financial",
+      "title": "Google Play Financial Services policy",
+      "url": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "authority": "Google Play",
+      "verifiedAt": "2026-09-06T17:12:48.000Z",
+      "status": "read",
+      "notes": "已阅读指定页面的完整政策、通用要求及国别附加条款。页面未声明可引用的版本号；本地版本是研究批次，不是Google官方版本。"
+    },
+    {
+      "id": "bot-personal-loan",
+      "title": "BoT supervised personal loan guidance",
+      "url": "https://www.bot.or.th/th/satang-story/managing-debt/personal-loan.html",
+      "authority": "Bank of Thailand",
+      "verifiedAt": "2026-09-06T17:12:48.000Z",
+      "status": "read",
+      "notes": "描述受监管个人贷款的产品范围及利率费用背景。不同产品范围不能合并为泰国所有信贷统一上限；本版不自动判断本地上限。"
+    },
+    {
+      "id": "ojk-pojk-40-2024",
+      "title": "OJK POJK 40 Tahun 2024: LPBBTI",
+      "url": "https://ojk.go.id/id/regulasi/Pages/POJK-40-Tahun-2024-Layanan-Pendanaan-Bersama-Berbasis-Teknologi-Informasi.aspx",
+      "authority": "OJK",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "官方法规索引与检索摘要列出2024年LPBBTI规则；未完成该法规全文逐条适用核验。不得照搬旧技能中的逐年日费率。"
+    },
+    {
+      "id": "secp-digital-lending",
+      "title": "SECP briefing on digital lending requirements (2023-01-07)",
+      "url": "https://www.secp.gov.pk/wp-content/uploads/2023/01/Press-Release-Jan-7-SECP-apprised-digital-lenders-on-new-regulatory-requirements.pdf",
+      "authority": "SECP",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "官方检索摘要支持一NBFC一应用背景；PDF正文读取未成功。当前软件适用的商店要求以已读Google政策为准，不将2023通报视为完整现行法律。"
+    },
+    {
+      "id": "sec-ph-authority",
+      "title": "SEC Philippines: Lending and financing companies",
+      "url": "https://appointment.sec.gov.ph/lending-companies-and-financing-companies-2/lending-companies-and-financing-companies/",
+      "authority": "SEC Philippines",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "官方检索摘要说明公司设立与经营授权有区别；未对具体主体查询注册或授权。"
+    },
+    {
+      "id": "sec-ph-current-index",
+      "title": "SEC Philippines current notices and memorandum circular index",
+      "url": "https://www.sec.gov.ph/",
+      "authority": "SEC Philippines",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "检索索引出现2026年第20号备忘录及OLP披露指南；首页直读失败，未把未读新规详情作为自动规则。"
+    },
+    {
+      "id": "banxico-cat",
+      "title": "Banco de México CAT explanation and calculator",
+      "url": "https://www.banxico.org.mx/CATWebTarjetas/CATWebTarjetas.xhtml",
+      "authority": "Banco de México",
+      "verifiedAt": "2026-09-06T17:12:48.000Z",
+      "status": "read",
+      "notes": "CAT是年度综合融资成本指标；此页含循环额度/信用卡计算场景，不能把CAT数字无条件重命名成普通利息或GP最高APR。"
+    },
+    {
+      "id": "condusef-registers",
+      "title": "CONDUSEF financial service registers",
+      "url": "https://www.condusef.gob.mx/?p=registros",
+      "authority": "CONDUSEF",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "官方索引列出SIPRES等登记工具；本次页面直读失败，没有核验具体机构，也不推断所有放贷公司须同一种牌照。"
+    },
+    {
+      "id": "bcra-p2p-register",
+      "title": "BCRA register for peer-to-peer credit service providers (2021-11-25)",
+      "url": "https://www.bcra.gob.ar/noticias/el-bcra-crea-un-registro-para-los-proveedores-de-servicios-de-credito-entre-particulares/",
+      "authority": "BCRA",
+      "verifiedAt": "2026-09-06T17:12:48.000Z",
+      "status": "read",
+      "notes": "官方历史通报明确撮合主体与放贷方区分，登记不等于获准金融中介或吸收公众资金；作为来源角色背景，不作现行全法律判定。"
+    },
+    {
+      "id": "bcra-rate-rules",
+      "title": "BCRA consolidated interest-rate rules",
+      "url": "https://web2.bcra.gob.ar/Pdfs/Texord/t-tasint.pdf",
+      "authority": "BCRA",
+      "verifiedAt": null,
+      "status": "search_excerpt_only",
+      "notes": "检索定位到CFT披露相关官方资料，但本轮PDF直读失败，不执行具体版次/版式/阈值判断。"
+    },
+    {
+      "id": "appeye-method",
+      "title": "Appeye v0.2 evidence extraction method",
+      "url": "https://github.com/zequnjiang/appeye/blob/main/docs/requirements/V0.2.md",
+      "authority": "Appeye product method",
+      "verifiedAt": "2026-09-06T17:12:48.000Z",
+      "status": "internal_method",
+      "notes": "工程启发式，仅用于信贷线索和披露文本识别，不属于监管或商店政策。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "GP-TH-MAX-INTEREST",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": ["google-play"],
+      "countries": ["th"],
+      "title": "泰国最高利率披露",
+      "summary": "泰国个人贷商店页列最高利率；普通最高利率与包含费用的APR分开提取，不互相代填。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Thailand",
+      "fields": ["maximumInterestRate"],
+      "condition": "保留利率类型、周期和原文；不能从本金、收益率或任意百分比推断"
+    },
+    {
+      "id": "GP-PL-TERMS",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "个人贷还款期间",
+      "summary": "保存最短与最长还款期文本及单位。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / personal-loan metadata",
+      "fields": [
+        "minRepaymentTerm",
+        "maxRepaymentTerm"
+      ],
+      "condition": "适用于个人贷款或其撮合服务；不从任意天数推断贷款全额到期"
+    },
+    {
+      "id": "GP-PL-APR",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "最高综合年化成本",
+      "summary": "保留最高APR或当地法律等效指标的明确披露，不将普通利率自动当作APR。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / personal-loan metadata",
+      "fields": [
+        "maximumApr"
+      ],
+      "condition": "个人贷款或撮合；指标类型与原单位必须可辨"
+    },
+    {
+      "id": "GP-PL-EXAMPLE",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "代表性贷款成本示例",
+      "summary": "核对是否存在含本金及适用费用的代表性总成本片段。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / personal-loan metadata",
+      "fields": [
+        "representativeExample"
+      ],
+      "condition": "检测片段存在不证明其计算正确或完整"
+    },
+    {
+      "id": "GP-PL-PRIVACY",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "隐私政策信息",
+      "summary": "保留隐私政策链接或说明；链接存在不证明政策正文满足要求。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / personal-loan metadata",
+      "fields": [
+        "privacyPolicy"
+      ],
+      "condition": "隐私正文未采集时不能宣称完成隐私审查"
+    },
+    {
+      "id": "GP-PL-SCOPE",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "个人贷范围与撮合",
+      "summary": "直接放贷、获客及连接第三方出借人均可能适用；抵押房贷、车贷及循环授信不属于该段个人贷定义。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / definition and scope",
+      "fields": [],
+      "condition": null
+    },
+    {
+      "id": "GP-PL-SHORT-TERM",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "短期全额还清限制",
+      "summary": "个人贷款在发放后60日内或第60日须全额偿还受到限制；仅有单次分期日不是全额到期证据。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / repayment restriction",
+      "fields": [],
+      "condition": "巴基斯坦段另写明依法明确允许的极少数例外，不能自动判定可获例外"
+    },
+    {
+      "id": "GP-FIN-CATEGORY",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "类别与申报",
+      "summary": "个人贷及EWA有Finance类别和金融功能申报要求；类别只可作为弱线索。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Loans / EWA / financial declaration",
+      "fields": [],
+      "condition": null
+    },
+    {
+      "id": "GP-GEN-ENTITY",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "账号与资质关联",
+      "summary": "平台可要求证明开发者账号与提交资质文件的关联，描述中公司名不是关联核验。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "General requirements",
+      "fields": [],
+      "condition": null
+    },
+    {
+      "id": "GP-GEN-PERMISSIONS",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "permission",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "敏感权限限制",
+      "summary": "适用范围包含个人贷、撮合、授信及贷款辅助工具/EWA；商店权限样本不等于APK或运行时完整审查。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "General requirements",
+      "fields": [],
+      "condition": null,
+      "forbiddenPermissions": [
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_CONTACTS",
+        "ACCESS_FINE_LOCATION",
+        "READ_PHONE_NUMBERS",
+        "READ_MEDIA_VIDEO",
+        "QUERY_ALL_PACKAGES",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    {
+      "id": "GP-EWA-DISCLOSURES",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "*"
+      ],
+      "title": "工资预支专属披露",
+      "summary": "EWA具有另列定义及还款、费用、成本示例、隐私披露；不套用普通个人贷APR缺失结论。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Earned Wage Access",
+      "fields": [
+        "fees",
+        "representativeExample",
+        "privacyPolicy"
+      ],
+      "condition": "需要明确EWA产品语境，不能只靠payday一词"
+    },
+    {
+      "id": "GP-PH-IDENTITY",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "ph"
+      ],
+      "title": "菲律宾描述中的主体与编号",
+      "summary": "个人贷款描述须列公司名、业务名、SEC注册编号及CA；保存声明不验证编号真伪。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Philippines",
+      "fields": [
+        "corporateName",
+        "businessName",
+        "secRegistration",
+        "certificateOfAuthority"
+      ],
+      "condition": "适用融资/贷款公司通过OLP放贷的描述"
+    },
+    {
+      "id": "GP-PH-P2P",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "ph"
+      ],
+      "title": "菲律宾P2P交易中介",
+      "summary": "涉及该类众筹时须经SEC注册中介，不能从一个普通公司名验证中介资格。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Philippines",
+      "fields": [],
+      "condition": null
+    },
+    {
+      "id": "GP-ID-LICENSE",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "id"
+      ],
+      "title": "印尼资质材料",
+      "summary": "适用OJK相关技术型借贷服务须向平台提交有效许可；描述未识别许可不等于没有提交。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Indonesia",
+      "fields": [
+        "ojkLicense"
+      ],
+      "condition": "GP引用77/2016及其后修订；当前OJK法律全文未由本版逐条核验"
+    },
+    {
+      "id": "GP-PK-APP-LIMIT",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "pk"
+      ],
+      "title": "巴基斯坦主体与应用限制",
+      "summary": "每NBFC放贷主体一个DLA；跨应用公司关系尚未验证，不能自动认定超过限制。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Pakistan",
+      "fields": [],
+      "condition": null
+    },
+    {
+      "id": "GP-PK-APPROVAL",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "pk"
+      ],
+      "title": "巴基斯坦批准材料",
+      "summary": "向平台提交SECP关于提供或撮合数字借贷的批准证明；文本匹配不替代批准核验。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Pakistan",
+      "fields": [
+        "secpApproval"
+      ],
+      "condition": null
+    },
+    {
+      "id": "GP-TH-ENTITIES",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "th"
+      ],
+      "title": "泰国商店页主体",
+      "summary": "全部面向泰国的个人贷商店页列出BoT/FPO持牌贷款服务提供者名称和开发者法律实体名。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Thailand",
+      "fields": [
+        "loanProvider",
+        "developerLegalEntity"
+      ],
+      "condition": "公司及持牌属性均按页面声明保留，不自动验证"
+    },
+    {
+      "id": "GP-TH-FEES",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "th"
+      ],
+      "title": "泰国费用披露",
+      "summary": "泰国个人贷商店页披露全部费用；未检测或仅部分费用片段不能自动判违规或通过。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Thailand",
+      "fields": [
+        "fees"
+      ],
+      "condition": null
+    },
+    {
+      "id": "GP-TH-LICENSE",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "context",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "th"
+      ],
+      "title": "泰国15%资质条件",
+      "summary": "利率达到15%时存在BoT/MoF许可及相关材料要求；产品类别与具体文件由人工核验。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Thailand",
+      "fields": [],
+      "condition": "仅在明确利率类型/周期/最高值时解释条件，否则条件未判定"
+    },
+    {
+      "id": "GP-TH-UNREGULATED",
+      "version": "2026-09-07.1",
+      "retrievedAt": "2026-09-06T17:12:48.000Z",
+      "kind": "disclosure",
+      "stores": [
+        "google-play"
+      ],
+      "countries": [
+        "th"
+      ],
+      "title": "泰国低于15%的附加声明",
+      "summary": "利率低于15%时，商店页另需说明该服务方不受BoT/FPO监管。",
+      "sourceId": "google-play-financial",
+      "sourceUrl": "https://support.google.com/googleplay/android-developer/answer/9876821",
+      "sourceSection": "Country-specific / Thailand",
+      "fields": [
+        "unregulatedStatement"
+      ],
+      "condition": "明确最高利率低于15%时适用；证据不足时条件未判定"
+    }
+  ],
+  "countries": [
+    {
+      "code": "th",
+      "googlePlayAdditionsVerified": true,
+      "localLawStatus": "context-only",
+      "note": "Google Play泰国附加已核对；BoT产品指导用于背景，未将单产品上限应用到所有信贷。",
+      "sourceIds": [
+        "google-play-financial",
+        "bot-personal-loan"
+      ]
+    },
+    {
+      "code": "ph",
+      "googlePlayAdditionsVerified": true,
+      "localLawStatus": "context-only",
+      "note": "Google Play菲律宾描述与材料项已核对；2026 SEC新规全文未核验，不照搬旧技能利率。",
+      "sourceIds": [
+        "google-play-financial",
+        "sec-ph-authority",
+        "sec-ph-current-index"
+      ]
+    },
+    {
+      "code": "id",
+      "googlePlayAdditionsVerified": true,
+      "localLawStatus": "context-only",
+      "note": "Google Play印尼许可项已核对；OJK现行全规则及分产品费率未核验，不设自动本地费率红线。",
+      "sourceIds": [
+        "google-play-financial",
+        "ojk-pojk-40-2024"
+      ]
+    },
+    {
+      "code": "pk",
+      "googlePlayAdditionsVerified": true,
+      "localLawStatus": "context-only",
+      "note": "Google Play巴基斯坦批准/一主体一DLA已核对；不以描述确认SECP批准或例外。",
+      "sourceIds": [
+        "google-play-financial",
+        "secp-digital-lending"
+      ]
+    },
+    {
+      "code": "mx",
+      "googlePlayAdditionsVerified": false,
+      "localLawStatus": "context-only",
+      "note": "指定Google Play页面未列墨西哥附加条款；保留通用规则、CAT和SIPRES背景，本地全面合规未核验。",
+      "sourceIds": [
+        "google-play-financial",
+        "banxico-cat",
+        "condusef-registers"
+      ]
+    },
+    {
+      "code": "ar",
+      "googlePlayAdditionsVerified": false,
+      "localLawStatus": "context-only",
+      "note": "指定Google Play页面未列阿根廷附加条款；BCRA背景帮助区分撮合与放贷，本地全面合规未核验。",
+      "sourceIds": [
+        "google-play-financial",
+        "bcra-p2p-register",
+        "bcra-rate-rules"
+      ]
+    }
+  ]
+}

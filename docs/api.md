@@ -1,4 +1,4 @@
-# Appeye API（MVP 1.0）
+# Appeye API（V0.2，兼容 MVP 1.0）
 
 JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login 外，接口必须携带登录 cookie。失败格式 `{ "error": "可读原因", "details": [] }`；details 仅输入校验时存在。状态码：400 参数错误、401 未登录/错误密码、403 来源拒绝、404 不存在、409 状态冲突或演示采集限制、429 登录限速、503 未设置管理员密码。
 
@@ -57,3 +57,37 @@ JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login
 - Job：`{id,type,status,country,store,appId,attempts,maxAttempts,progress,result,error,createdAt,startedAt,finishedAt,nextRunAt}`。
 
 正式 API 不估算日下载量或国家下载量。所有演示响应都有会话/overview 数据集标记，演示模式拒绝会产生真实采集的写接口。
+
+## V0.2：完整商店资料、补充采集与自动识别
+
+依赖切换为 `@mradex77/google-play-scraper@1.1.0` 和 `@perttu/app-store-scraper@2.1.0`。原接口继续可用，以下字段与路由为新增。
+
+应用增加 `developerId`、`developerUrl`、`developerEmail`、`developerAddress`、`developerLegalName/Email/Address/PhoneNumber`、`sellerName`、`sellerUrl`、`screenshots`、`storeData`。`storeData` 保存整个库返回对象，未单独映射的新字段仍可读取。App Store 详情额外保留已获取的原始 iTunes JSON 于 `storeData._appeyeTransport`；`sellerName` 按 trackId 从该原始响应提取，不用开发者显示名推断。`rawDetail` 为最近一次真实成功快照的原始对象，旧观察不会伪装为新采集。
+
+`GET /api/apps/:id` 额外返回 `rawDetail`、`enrichments` 和最近 20 条 `discoveries`。
+
+| 方法和路径 | 输入/查询 | 返回 |
+| --- | --- | --- |
+| GET `/api/apps/:id/discoveries` | `limit,offset` | `{discoveries,total}`，每次搜索返回的原始行与请求上下文，包括重复发现 |
+| GET `/api/apps/:id/enrichments` | 无 | `{enrichments}`，仅已尝试过的补充类型；空列表表示尚未采集 |
+| GET `/api/apps/:id/enrichments/:kind/history` | `limit,offset` | `{history,total}`，包括成功、空、失败、不支持的每次尝试 |
+| POST `/api/jobs` | `{type:"enrich",appId}` | 202 `{jobs,job}`，独立重采所有补充类型 |
+| PATCH `/api/apps/:id` | `{classification:"candidate"或"confirmed"或"excluded"}` | 设为人工分类且 `manualOverride=true` |
+| PATCH `/api/apps/:id` | `{classificationMode:"auto"}` | 明确解除人工/历史覆盖并应用最新规则分析；兼容旧 `mode:"auto"` 写法 |
+| GET `/api/apps` | 原查询加 `loanVerdict=strong/possible/insufficient` | 按自动分析结论筛选，独立于人工有效分类 |
+
+`kind` 为 `permissions`、`dataSafety`、`privacy`、`versionHistory`、`inAppPurchases`、`ratings`、`developer`。GP 支持 permissions/dataSafety/developer；Apple 支持 privacy/versionHistory/inAppPurchases/ratings/developer。其余明确为 unsupported，不制造 Android 或 iOS 权限数据。developer 是商店开发者目录返回资料，不是工商登记核验。
+
+`Enrichment` 包含 `appId,kind,status,lastAttemptAt,lastSuccessAt,fetchedAt,source,requestCountry,requestLanguage,attemptSource,attemptRequestCountry,attemptRequestLanguage,data,raw,error,note`。其中：
+
+- `status` 表示最近一次尝试：available（有返回）、empty（成功空返回）、failed（调用失败）、unsupported（当前适配器不支持）。
+- `data/raw/source/requestCountry/requestLanguage/fetchedAt` 保留最近成功数据及其上下文；`fetchedAt=lastSuccessAt`。失败或不支持不会把旧数据清空，也不会更新成功时间。
+- `lastAttemptAt/attemptSource/attemptRequestCountry/attemptRequestLanguage/error` 表示最新尝试，不能将旧成功数据当作本次新鲜结果。
+- 没有成功记录时 data/raw/fetchedAt 为 null；没有任何尝试时该类型不在 enrichments 中。
+- GP dataSafety 当前上游不传国家，`requestCountry=null`；Apple privacy/历史/评论等并不验证实际语言，相关补充 `requestLanguage=null`。
+
+详情刷新成功自动排入独立 enrich 任务。补充任务逐类隔离异常，某类失败时其余类继续保存；最终补充任务显示部分失败并按队列规则有限重试。详情主任务及最后成功详情不被补充异常覆盖。
+
+应用还返回 `classificationSource:'auto'|'manual'|'legacy'`、`manualOverride:boolean`、`effectiveClassification` 和 `loanAnalysis`。classification/effectiveClassification 都是当前生效值。所有 V0.1 旧记录迁移为 legacy+override，原分类完全保留；新记录默认 auto，只有 strong 应用 confirmed，其余 candidate。人工决定始终优先。
+
+`loanAnalysis` 保存规则版本、真实分析时间 analyzedAt、原文观测时间 sourceObservedAt、证据评分 confidence（0–100，不是概率）、verdict、原文证据、披露、不同角色主体和来源。API 不把文字披露、名称或编号等同于持牌验证、法律合规或设备权限。规则详情见 `server/loan-identification.ts` 与版本化 `server/policy-catalog.json`。

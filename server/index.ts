@@ -36,13 +36,15 @@ if (!demoMode && /demo/i.test(basename(databasePath)))
   throw new Error('正式模式不能使用 demo 数据库，请更改 DATABASE_PATH 或启用 DEMO_MODE');
 if (process.env.NODE_ENV === 'production' && !process.env.ADMIN_PASSWORD)
   throw new Error('生产环境必须设置 ADMIN_PASSWORD');
+const requestDelayMs = configuredNumber('SCRAPE_DELAY_MS', 1500, 0, 60000);
+const timeoutMs = configuredNumber('SCRAPE_TIMEOUT_MS', 30000, 100, 120000);
 const store = createStore(databasePath);
 store.setDataset(demoMode ? 'demo' : 'live');
 const worker = createWorker({
   store,
-  providers: createProviders(),
-  requestDelayMs: configuredNumber('SCRAPE_DELAY_MS', 1500, 0, 60000),
-  timeoutMs: configuredNumber('SCRAPE_TIMEOUT_MS', 30000, 100, 300000),
+  providers: createProviders({ timeoutMs, requestDelayMs }),
+  requestDelayMs,
+  timeoutMs,
   intervalMs: configuredNumber('WORKER_INTERVAL_MS', 2000, 50, 60000),
   schedule: process.env.AUTO_SCHEDULE !== 'false',
 });

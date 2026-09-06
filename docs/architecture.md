@@ -28,11 +28,11 @@ Google Play 安装区间是公开累计商店指标，不能代表所选国家�
 
 ## 采集任务
 
-任务类型为 `discover`、`refresh`、`reviews`，状态为 `queued → running → succeeded`，失败自动返回 `queued`，达到上限后为 `failed`。领取任务和状态迁移使用事务，活跃任务通过部分唯一索引去重。单个应用的详情与评论独立执行；单关键词失败也继续其他关键词，并将部分失败和实际错误记录在发现任务中。
+任务类型为 `discover`、`refresh`、`reviews`、`enrich`，状态为 `queued → running → succeeded`，失败自动返回 `queued`，达到上限后为 `failed`。领取任务和状态迁移使用事务，活跃任务通过部分唯一索引去重。单个应用的详情与评论独立执行；单关键词失败也继续其他关键词，并将部分失败和实际错误记录在发现任务中。
 
-每个启用国家、每个商店按 `intervalHours`（默认 24 小时）创建发现任务，同时为未排除应用创建刷新任务。发现默认每个关键词取 20 个结果，写为候选，创建详情任务；详情成功后创建评论任务。人工分类永不被搜索覆盖。暂停国家停止后续周期入队，已入队任务继续，手动发现仍允许。`AUTO_SCHEDULE=false` 关闭自动排程，手动任务仍会执行。
+每个启用国家、每个商店按 `intervalHours`（默认 24 小时）创建发现任务，同时为未排除应用创建刷新任务。发现默认每个关键词取 20 个结果，写为候选，创建详情任务；详情成功后创建评论任务。人工/历史覆盖不被搜索或自动分析覆盖；新应用允许按明确证据自动识别，见 V0.2 说明。暂停国家停止后续周期入队，已入队任务继续，手动发现仍允许。`AUTO_SCHEDULE=false` 关闭自动排程，手动任务仍会执行。
 
-worker 默认轮询 2 秒、请求起始时间最少相隔 1.5 秒、一次请求 30 秒超时，最多 3 次尝试，重试退避为 30 秒、60 秒。API 可重新排队最终失败任务。进程重启将遗留 running 任务恢复为 queued；若已达上限则标失败，防止无限尝试。Google Play 使用 AbortSignal 和底层请求超时；App Store 底层请求使用超时，无法保证取消已发送到商店的请求。关闭服务时等待当前任务最多 35 秒，否则由下次启动恢复。
+worker 默认轮询 2 秒、请求起始时间最少相隔 1.5 秒、一次请求 30 秒超时，最多 3 次尝试，重试退避为 30 秒、60 秒。API 可重新排队最终失败任务。进程重启将遗留 running 任务恢复为 queued；若已达上限则标失败，防止无限尝试。两个新采集库均使用原生 fetch、AbortSignal 和底层请求超时；库内重试设为 0，由持久任务队列统一执行有限重试。采集器内部的多次请求也经过共享 fetch 限速器。关闭服务时等待当前任务最多 35 秒，否则由下次启动恢复。
 
 仅支持一个活动服务进程/worker 访问一个数据库；不能开启多副本、多个独立 worker 或将 SQLite 放在网络文件系统。当前没有分布式租约。未来需要扩容时可将相同任务契约迁移到 PostgreSQL 与独立 worker。
 
@@ -65,3 +65,22 @@ FROM changes c ORDER BY c.observed_at DESC LIMIT 100;
 ```
 
 采集是公开页面/接口的有限观察，不提供商店官方 API 服务等级。指定 scraper 上游接口可能改变；实际错误应通过任务中心排查，不能用演示结果替代。
+
+
+## V0.2 迁移与完整资料
+
+生产依赖精确切换为 [MrAdex77 的 `@mradex77/google-play-scraper@1.1.0`](https://github.com/MrAdex77/google-play-scraper) 和 [plahteenlahti 的 `@perttu/app-store-scraper@2.1.0`](https://github.com/plahteenlahti/app-store-scraper)，两者 MIT。旧 scraper、request 链及其临时 overrides 已移除。库自带类型，无旧 ambient module 声明。适配器显式关闭库内重试，把超时/AbortSignal 传入原生 fetch；所有实际 HTTP 请求共享串行起始间隔，默认 1500 ms。`SCRAPE_TIMEOUT_MS` 同时传给 worker 和适配器，范围 100–120000 ms（符合 GP 客户端上限）。测试可注入 scraper client 或 fetch，缺补充方法时报告 unsupported，不回退访问真实网络。
+
+005 migration 在事务中扩展 jobs 的 enrich 类型，并保留全部旧任务 ID/时间/状态；新增 discovery_observations、enrichment_history、enrichments，以及 apps 的分类覆盖和分析字段。所有旧应用迁移为 legacy 人工覆盖，连旧 candidate 也保留，因为历史数据库无法证明它是否曾被人工重置。
+
+启动后仅将最近已有原始快照中的字段回填到当前 storeData，补充缺失的规则分析；没有新网络调用，不更改原快照、首次发现或成功观测时间，也不补造搜索或权限历史。离线维护命令为 `DATABASE_PATH=data/appeye.sqlite npx tsx scripts/backfill-v02.ts`；先停止唯一服务并备份。脚本比较升级前后 apps/snapshots/changes/reviews/jobs 数量并运行 quick_check。可加 --force-analysis 更新分析，仍不覆盖人工/legacy 分类。
+
+完整库返回对象保存为规范数据的 storeData，并同时保留原始快照。App Store 原生 fetch 包装器会复制已经返回的 iTunes JSON，保留在 _appeyeTransport，无需额外 HTTP；从与 trackId 匹配的原响应获得 sellerName 等类型投影可能省略的字段。开发者显示名、GP 法律实体字段、Apple seller 以及描述中抽取的主体保持不同来源和角色。未知字段不丢弃，前端用 JSON 文本查看，不执行原始 HTML。
+
+每一次搜索命中的行，包括已存在应用和重复关键词命中，都写入 discovery_observations，包含关键词、采集国家/语言、时间、来源和完整 data/raw。早期版本未留存的搜索响应不会伪造补齐。
+
+详情成功后独立入队 reviews 和 enrich。enrich 包括 GP permissions/dataSafety/developer、Apple privacy/versionHistory/inAppPurchases/ratings/developer，其他组合为 unsupported。developer 只是商店公开开发者目录；GP 从详情取得的 URL 编码开发者 ID 在请求目录时解码，原字段仍完整保留。权限必须表述为商店声明/返回的权限，不能解释为用户实际授权、Manifest、动态行为或操作系统权限扫描。
+
+每种补充资料保存当前成功数据和每次尝试历史。成功空结果与 failed/unsupported 不同；后两者保留先前成功数据、原成功时间及原上下文，并单独记录新错误、尝试时间与尝试上下文。部分失败不会将主详情标为失败，也不会阻止其余补充类型保存。没有采集记录时前端显示未采集，不使用空列表冒充成功。
+
+规则引擎是带原文证据的启发式提取，不是法律裁定。new/auto 应用可因 strong 结果变为 confirmed，其余 candidate；manual/legacy 永不被规则覆盖。切换自动模式必须显式调用 classificationMode:auto。loanVerdict 筛选可查看旧应用的自动分析而不改动其历史判断。分析时间与原文观测时间独立保存，证据评分不宣称统计概率。

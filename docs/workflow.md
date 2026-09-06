@@ -63,3 +63,7 @@ GitHub 仓库、Issues 和 Pull Requests 是本项目需求与交付的正式记
 4. **[回归与验收 #4](https://github.com/zequnjiang/appeye/issues/4)**：汇总 AC-01 至 AC-15 证据，跟踪报告和遗留缺陷，链接父议题。
 
 实现分支为 `codex/mvp-credit-monitor`，对应 [PR #6](https://github.com/zequnjiang/appeye/pull/6)。交付证据见 [Alex 测试报告](reports/ALEX-TEST-REPORT.md) 与 [PM 验收报告](reports/PM-ACCEPTANCE.md)。所有议题须在对应测试、PM 验收与报告发布完成后再关闭。
+
+## V0.2 GitHub 议题
+
+[PM 总需求 #7](https://github.com/zequnjiang/appeye/issues/7) → [采集器迁移 #5](https://github.com/zequnjiang/appeye/issues/5) / [完整信息 #8](https://github.com/zequnjiang/appeye/issues/8) / [信贷识别 #9](https://github.com/zequnjiang/appeye/issues/9)。文档见 [V0.2 需求](requirements/V0.2.md)，报告以 `V0.2-` 前缀保存，不覆盖首版验收记录。

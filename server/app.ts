@@ -6,13 +6,13 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import type { Store } from './db.js';
-import type { Providers, StoreName } from './types.js';
+import { enrichmentKinds, type Providers, type StoreName } from './types.js';
 import type { Worker } from './worker.js';
 
 export const limitations = [
   '首次发现是本系统第一次观察到该应用的时间，不代表实际新上架；商店提供的发布日期单独保存。',
   'Google Play 安装量为商店公开累计区间，不是国家下载量、日下载量或精确销量；App Store 不公开下载量，统一显示未知。',
-  '关键词搜索只形成候选样本，覆盖受搜索排序、语言、地区及结果上限影响；候选需人工确认，不能代表全市场。',
+  '关键词搜索形成有限样本，覆盖受搜索排序、语言、地区及结果上限影响，不能代表全市场。新应用有强信贷证据时自动确认，其余保留候选；人工及历史分类优先，自动识别不代表持牌或合规认定。',
   '变化和更新频率仅基于本系统采集以来的快照，不补造历史；版本观测不足时频率为未知。',
   '评论是有限的近期样本。Google Play 请求指定语言与国家；App Store 按店面采集，实际评论语言未验证。',
   '采集失败只记录错误，不自动推断应用下架。',
@@ -40,6 +40,7 @@ const filterSchema = pageSchema.extend({
     .optional(),
   store: storeName.optional(),
   classification: classification.optional(),
+  loanVerdict: z.enum(['strong', 'possible', 'insufficient']).optional(),
   q: z.string().max(200).optional(),
 });
 class HttpError extends Error {
@@ -239,6 +240,9 @@ export function createApp(options: AppOptions) {
     const id = appId(req);
     res.json({
       app: store.getApp(id),
+      rawDetail: store.getRawDetail(id),
+      enrichments: store.listEnrichments(id),
+      discoveries: store.listDiscoveries(id, 20).discoveries,
       snapshots: store.listSnapshots(id, 50).snapshots,
       changes: store.listChanges({ appId: id, limit: 100 }).changes,
       reviews: store.listReviews(id, { limit: 50 }).reviews,
@@ -247,8 +251,33 @@ export function createApp(options: AppOptions) {
   });
   app.patch('/api/apps/:id', (req, res) => {
     const id = appId(req);
-    const input = z.object({ classification }).strict().parse(req.body);
-    res.json({ app: store.updateClassification(id, input.classification) });
+    const input = z
+      .union([
+        z.object({ classification }).strict(),
+        z.object({ classificationMode: z.literal('auto') }).strict(),
+        z.object({ mode: z.literal('auto') }).strict(),
+      ])
+      .parse(req.body);
+    res.json({
+      app:
+        'classification' in input
+          ? store.updateClassification(id, input.classification)
+          : store.setClassificationMode(id, 'auto'),
+    });
+  });
+  app.get('/api/apps/:id/discoveries', (req, res) => {
+    const id = appId(req);
+    const page = pageSchema.parse(req.query);
+    res.json(store.listDiscoveries(id, page.limit, page.offset));
+  });
+  app.get('/api/apps/:id/enrichments', (req, res) =>
+    res.json({ enrichments: store.listEnrichments(appId(req)) }),
+  );
+  app.get('/api/apps/:id/enrichments/:kind/history', (req, res) => {
+    const id = appId(req);
+    const kind = z.enum(enrichmentKinds).parse(req.params.kind);
+    const page = pageSchema.parse(req.query);
+    res.json(store.listEnrichmentHistory(id, kind, page.limit, page.offset));
   });
   app.get('/api/apps/:id/snapshots', (req, res) => {
     const id = appId(req),
@@ -287,7 +316,7 @@ export function createApp(options: AppOptions) {
         pageSchema
           .extend({
             status: z.enum(['queued', 'running', 'succeeded', 'failed']).optional(),
-            type: z.enum(['discover', 'refresh', 'reviews']).optional(),
+            type: z.enum(['discover', 'refresh', 'reviews', 'enrich']).optional(),
             country: z
               .string()
               .regex(/^[a-z]{2}$/)
@@ -301,7 +330,7 @@ export function createApp(options: AppOptions) {
     liveOnly();
     const input = z
       .object({
-        type: z.enum(['discover', 'refresh', 'reviews']),
+        type: z.enum(['discover', 'refresh', 'reviews', 'enrich']),
         country: z
           .string()
           .regex(/^[a-z]{2}$/)

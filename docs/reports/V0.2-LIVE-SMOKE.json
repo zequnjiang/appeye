@@ -1,0 +1,112 @@
+{
+  "date": "2026-09-07 Asia/Shanghai",
+  "scope": "Live network calls; no fixture fallback; results are summaries, not complete payloads",
+  "packages": {
+    "googlePlay": "@mradex77/google-play-scraper@1.1.0",
+    "appStore": "@perttu/app-store-scraper@2.1.0"
+  },
+  "samples": [
+    {
+      "store": "google-play",
+      "country": "th",
+      "language": "th",
+      "externalId": "com.aavelo.flowfund",
+      "detailObservedAt": "2026-09-06T17:19:27.068Z",
+      "searchResults": 1,
+      "title": "Loan Hub–สินเชื่อถูกกฎหมาย",
+      "developer": "TEXTME COMPANY LIMITED",
+      "developerLegalName": "TEXTME COMPANY LIMITED",
+      "sellerName": null,
+      "storeDataFieldCount": 57,
+      "reviewSample": 3,
+      "permissions": {
+        "status": "available",
+        "count": 10
+      },
+      "dataSafety": {
+        "status": "available",
+        "requestCountry": null,
+        "keys": [
+          "sharedData",
+          "collectedData",
+          "securityPractices",
+          "privacyPolicyUrl"
+        ]
+      },
+      "privacy": {
+        "status": "unsupported"
+      },
+      "versionHistory": {
+        "status": "unsupported"
+      },
+      "inAppPurchases": {
+        "status": "unsupported"
+      },
+      "ratings": {
+        "status": "unsupported"
+      },
+      "developerCatalog": {
+        "status": "available",
+        "count": 2,
+        "source": "https://play.google.com/store/apps/developer?id=TEXTME+COMPANY+LIMITED&gl=th&hl=th",
+        "verifiedAt": "2026-09-06T17:22:05.707Z",
+        "fix": "URL-query encoded developer ID decoded before passing to URLSearchParams-based upstream client"
+      }
+    },
+    {
+      "store": "app-store",
+      "country": "th",
+      "language": "th",
+      "externalId": "6748000182",
+      "detailObservedAt": "2026-09-06T17:19:36.125Z",
+      "searchResults": 1,
+      "title": "Kredivo - ใช้ก่อน จ่ายทีหลัง",
+      "developer": "บริษัท เครดีโว่ (ไทยแลนด์) จำกัด",
+      "sellerName": "Kredivo (Thailand) Company Limited",
+      "sellerSource": "Original iTunes lookup JSON matched by trackId",
+      "storeDataFieldCount": 35,
+      "originalJsonResponses": 1,
+      "installs": null,
+      "reviewSample": 50,
+      "reviewEndpoint": "XML RSS; same Thai example returned empty using previous JSON RSS",
+      "permissions": {
+        "status": "unsupported"
+      },
+      "dataSafety": {
+        "status": "unsupported"
+      },
+      "privacy": {
+        "status": "available",
+        "keys": [
+          "privacyPolicyUrl",
+          "privacyTypes"
+        ]
+      },
+      "versionHistory": {
+        "status": "available",
+        "count": 15
+      },
+      "inAppPurchases": {
+        "status": "empty",
+        "count": 0
+      },
+      "ratings": {
+        "status": "available",
+        "keys": [
+          "ratings",
+          "histogram"
+        ]
+      },
+      "developerCatalog": {
+        "status": "available",
+        "count": 1
+      }
+    }
+  ],
+  "limitations": [
+    "Store declarations are not device permissions or Manifest evidence.",
+    "A returned legal or seller name is not independently verified corporate registration or lending authorization.",
+    "Empty data is a library response, not proof that no relevant data exists.",
+    "Only these bounded Thai examples were verified live. Other countries and failure preservation are covered by fixtures."
+  ]
+}
