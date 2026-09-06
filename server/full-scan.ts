@@ -2,6 +2,11 @@ import { randomUUID, createHash } from 'node:crypto';
 import type { Store } from './db.js';
 import { classifyLoan } from './loan-identification.js';
 import { normalizeDeveloperContinuation } from './developer-continuation.js';
+import {
+  decodeGoogleDeveloperId,
+  googleDeveloperRequestUrl,
+  resolveGoogleDeveloperListingLink,
+} from './developer-route.js';
 import { enrichmentContext } from './providers.js';
 import {
   financeCollections,
@@ -297,7 +302,7 @@ export function createFullScanRunner(options: {
   }
   function retryFailed() {
     store.run(
-      "UPDATE full_scan_tasks SET status='queued',attempts=0,next_run_at=?,error=NULL,payload=json_remove(payload,'$.recoveryAttemptBase') WHERE batch_id=? AND status='failed'",
+      "UPDATE full_scan_tasks SET status='queued',next_run_at=?,error=NULL,payload=json_set(payload,'$.recoveryAttemptBase',attempts) WHERE batch_id=? AND status='failed'",
       time(),
       batchId,
     );
@@ -391,6 +396,56 @@ export function createFullScanRunner(options: {
     );
     return Number(inserted.lastInsertRowid);
   }
+  function developerRouting(
+    task: ScanTask,
+    app: NormalizedApp,
+  ): {
+    developerUrl?: string;
+    developerSourceHttpId?: number;
+  } {
+    const payload = JSON.parse(task.payload);
+    if (task.store !== 'google-play' || payload.kind !== 'developer' || !app.developerId) return {};
+    const detail = store.one(
+      "SELECT id FROM full_scan_tasks WHERE batch_id=? AND store='google-play' AND country=? AND app_id=? AND external_id=? AND kind='detail' AND status='succeeded' ORDER BY response_at DESC,id DESC LIMIT 1",
+      batchId,
+      task.country,
+      task.app_id!,
+      app.externalId,
+    );
+    if (!detail) return {};
+    const requestLanguage = payload.requestLanguage ?? language(task.country);
+    const record = store
+      .all(
+        'SELECT id,url FROM full_scan_http WHERE batch_id=? AND task_id=? AND status=200 ORDER BY id DESC',
+        batchId,
+        detail.id,
+      )
+      .find((row) => {
+        try {
+          const url = new URL(row.url);
+          return (
+            url.origin === 'https://play.google.com' &&
+            !url.username &&
+            !url.password &&
+            url.pathname === '/store/apps/details' &&
+            ['id', 'gl', 'hl'].every((key) => url.searchParams.getAll(key).length === 1) &&
+            url.searchParams.get('id') === app.externalId &&
+            url.searchParams.get('gl') === task.country &&
+            url.searchParams.get('hl') === requestLanguage
+          );
+        } catch {
+          return false;
+        }
+      });
+    if (!record) return {};
+    const body = store.one('SELECT body FROM full_scan_http WHERE id=?', record.id)?.body;
+    if (typeof body !== 'string') return {};
+    const developerUrl = resolveGoogleDeveloperListingLink(
+      body,
+      decodeGoogleDeveloperId(app.developerId),
+    );
+    return developerUrl ? { developerUrl, developerSourceHttpId: record.id } : {};
+  }
   function attachSources(appId: number, task: ScanTask) {
     // Atomic discovery + pointer makes restarts idempotent without changing existing Store methods.
     store.transaction(() => {
@@ -458,11 +513,21 @@ export function createFullScanRunner(options: {
       });
     const app = store.getApp(task.app_id!);
     if (!app) throw new Error('Batch enrichment app missing');
+    const routing = developerRouting(task, app);
+    if (task.store === 'google-play' && payload.kind === 'developer') {
+      // Freeze the evidence chosen for this attempt so failures use its actual request source.
+      delete payload.developerUrl;
+      delete payload.developerSourceHttpId;
+      Object.assign(payload, routing);
+      task.payload = json(payload);
+      store.run('UPDATE full_scan_tasks SET payload=? WHERE id=?', task.payload, task.id);
+    }
     return provider.enrich({
       ...context,
       externalId: app.externalId,
       developerId: app.developerId,
       kind: payload.kind,
+      ...routing,
     });
   }
   function applyTask(
@@ -889,22 +954,35 @@ export function createFullScanRunner(options: {
       const retry = stopping || task.attempts - recoveryBase + 1 < config.maxAttempts;
       if (task.kind === 'enrich' && task.app_id && !stopping) {
         const app = store.getApp(task.app_id)!;
-        const kind = JSON.parse(task.payload).kind as EnrichmentKind;
-        store.failEnrichment(
-          app.id,
+        const payload = JSON.parse(task.payload);
+        const kind = payload.kind as EnrichmentKind;
+        const requestLanguage =
+          task.store === 'app-store'
+            ? 'en_us'
+            : (payload.requestLanguage ?? language(task.country));
+        const failureContext = enrichmentContext(task.store, {
+          country: task.country,
+          language: requestLanguage,
+          externalId: app.externalId,
+          developerId: app.developerId,
           kind,
-          message,
-          enrichmentContext(task.store, {
-            country: task.country,
-            language:
-              task.store === 'app-store'
-                ? 'en_us'
-                : (JSON.parse(task.payload).requestLanguage ?? language(task.country)),
-            externalId: app.externalId,
-            developerId: app.developerId,
-            kind,
-          }),
-        );
+        });
+        if (task.store === 'google-play' && kind === 'developer' && app.developerId) {
+          const verifiedUrl = googleDeveloperRequestUrl(
+            payload.developerUrl,
+            decodeGoogleDeveloperId(app.developerId),
+            task.country,
+            requestLanguage,
+          );
+          if (verifiedUrl) {
+            failureContext.source = verifiedUrl;
+            failureContext.note += ` 目录路径取自本批次同ID应用详情链接（HTTP ${payload.developerSourceHttpId}）；本次请求失败不能据此推断开发者已下架。`;
+          } else {
+            failureContext.note +=
+              ' 未取得可靠的同ID listing 目录链接；沿用库默认路径选择，404不能单独证明开发者目录已下架。';
+          }
+        }
+        store.failEnrichment(app.id, kind, message, failureContext);
       }
       if (task.kind === 'detail' && task.app_id && !stopping)
         store.setAppError(task.app_id, message);

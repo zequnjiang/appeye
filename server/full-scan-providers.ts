@@ -2,6 +2,8 @@ import googlePlay from '@mradex77/google-play-scraper';
 import * as apple from '@perttu/app-store-scraper';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { normalizeDeveloperContinuation } from './developer-continuation.js';
+import { decodeGoogleDeveloperId, googleDeveloperRequestUrl } from './developer-route.js';
+import { describeTransportError } from './transport-error.js';
 import {
   createProviders,
   normalizeApp,
@@ -36,7 +38,12 @@ export interface ScanProvider {
   appWithPeers?(
     input: ProviderContext & { externalId: string; batchId: string; peerExternalIds: string[] },
   ): Promise<ScanDetailResult>;
-  enrich: NonNullable<Provider['enrich']>;
+  enrich(
+    input: Parameters<NonNullable<Provider['enrich']>>[0] & {
+      developerUrl?: string;
+      developerSourceHttpId?: number;
+    },
+  ): ReturnType<NonNullable<Provider['enrich']>>;
   reviewsPage(
     input: ProviderContext & { externalId: string; page: number; cursor: string | null },
   ): Promise<ScanPage<NormalizedReview>>;
@@ -154,7 +161,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         });
         return result;
       } catch (error) {
-        record.error = error instanceof Error ? error.message : String(error);
+        record.error = describeTransportError(error);
         options.onResponse?.(record);
         throw error;
       }
@@ -328,17 +335,29 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         if (!input.developerId) throw new Error('应用详情缺少开发者 ID，未发起开发者目录请求');
         const warnings: unknown[] = [];
         const compatibility: unknown[] = [];
-        let devId = input.developerId;
-        if (store === 'google-play') {
-          try {
-            devId = decodeURIComponent(devId.replace(/\+/g, ' '));
-          } catch {
-            /* retain raw ID */
-          }
-        }
+        const devId =
+          store === 'google-play' ? decodeGoogleDeveloperId(input.developerId) : input.developerId;
+        const verifiedDeveloperUrl =
+          store === 'google-play'
+            ? googleDeveloperRequestUrl(input.developerUrl, devId, input.country, input.language)
+            : null;
         const developerFetch: typeof fetch = async (url, init) => {
           const originalRequest = url instanceof Request ? url : undefined;
           const expanded = new URL(originalRequest?.url ?? String(url));
+          if (
+            verifiedDeveloperUrl &&
+            expanded.origin === 'https://play.google.com' &&
+            !expanded.username &&
+            !expanded.password &&
+            ['/store/apps/dev', '/store/apps/developer'].includes(expanded.pathname) &&
+            expanded.searchParams.getAll('id').length === 1 &&
+            expanded.searchParams.get('id') === devId
+          ) {
+            const verified = new URL(verifiedDeveloperUrl);
+            expanded.pathname = verified.pathname;
+            expanded.searchParams.set('gl', input.country);
+            expanded.searchParams.set('hl', input.language);
+          }
           if (
             store === 'app-store' &&
             expanded.hostname === 'itunes.apple.com' &&
@@ -391,11 +410,26 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         const provenance = enrichmentContext(store, input);
         return {
           ...provenance,
+          ...(verifiedDeveloperUrl ? { source: verifiedDeveloperUrl } : {}),
           ...(store === 'app-store' ? { source: `${provenance.source}&limit=200&lang=en_us` } : {}),
           status: hasEnrichmentData(raw) ? 'available' : 'empty',
           data: raw,
-          raw: { data: raw, warnings, compatibility },
-          note: `${provenance.note} ${store === 'google-play' ? '目录沿库内部公开游标读取至自然结束；无本地20项截断，异常/令牌循环会记录 warnings。' : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}${compatibility.length ? ` ${compatibility.length} 次已校验的续页布局适配；真实原HTTP保留，转换仅作为库的解析输入。` : ''}`,
+          raw: {
+            data: raw,
+            warnings,
+            compatibility,
+            ...(verifiedDeveloperUrl
+              ? {
+                  routing: {
+                    method: 'verified-listing-link',
+                    source: verifiedDeveloperUrl,
+                    listingSourceHttpId: input.developerSourceHttpId ?? null,
+                    developerId: devId,
+                  },
+                }
+              : {}),
+          },
+          note: `${provenance.note} ${store === 'google-play' ? `目录沿库内部公开游标读取至自然结束；无本地20项截断，异常/令牌循环会记录 warnings。${verifiedDeveloperUrl ? ' 目录路径取自本批次已保存应用详情中的同ID官方链接。' : ' 未取得可靠的同ID listing 目录链接；沿用库默认路径选择，404不能单独证明开发者目录已下架。'}` : '开发者 lookup 明确请求 limit=200；来源不提供外部续页游标，不能证明覆盖开发者全部产品。'}${warnings.length ? ` ${warnings.length} 条采集完整性告警。` : ''}${compatibility.length ? ` ${compatibility.length} 次已校验的续页布局适配；真实原HTTP保留，转换仅作为库的解析输入。` : ''}`,
         };
       },
       async list(input) {
