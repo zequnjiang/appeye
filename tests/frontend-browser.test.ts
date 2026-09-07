@@ -162,16 +162,23 @@ async function queryKey(page: Page) {
     .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-library-row')));
 }
 
-test('frontend: two real polls preserve the table DOM and apply new content automatically; failure retains rows', async () => {
+test('frontend #25: two real polls preserve the displayed list until the latest pending result is explicitly applied; failure retains rows', async () => {
   const { context, page, state } = await fixture();
   try {
     await page.locator('[data-library-table]').evaluate((el) => ((el as any).proof = 'same-dom'));
-    state.rows[0]!.title = 'Updated automatically';
-    await page.getByText('Updated automatically', { exact: true }).waitFor({ timeout: 18000 });
+    state.rows[0]!.title = 'First pending title';
+    await page
+      .getByText('有新数据，当前清单保持不变。', { exact: true })
+      .waitFor({ timeout: 18000 });
+    assert.equal(await page.getByText('Loan 1', { exact: true }).count(), 1);
+    state.rows[0]!.title = 'Latest pending title';
     const first = state.calls.length;
     await page.waitForFunction(() => document.querySelector('[data-library-table]') !== null);
     await page.waitForTimeout(15500);
     assert.ok(state.calls.length > first);
+    assert.equal(await page.getByText('Loan 1', { exact: true }).count(), 1);
+    await page.getByRole('button', { name: '更新清单', exact: true }).evaluate((b) => b.click());
+    await page.getByText('Latest pending title', { exact: true }).waitFor();
     assert.equal(
       await page.locator('[data-library-table]').evaluate((el) => (el as any).proof),
       'same-dom',
@@ -572,6 +579,87 @@ test('frontend: detail can return while its uncached request is pending or faile
     await page.getByRole('alert').filter({ hasText: 'Detail unavailable' }).waitFor();
     await page.getByRole('button', { name: '返回应用库' }).click();
     await page.locator('[data-library-row="1"]').waitFor();
+  } finally {
+    await context.close();
+  }
+});
+
+test('frontend refresh regression: a new first row must not scroll a user away from top controls at 817x863', async () => {
+  const { context, page, state } = await fixture();
+  try {
+    await page.setViewportSize({ width: 817, height: 863 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+    const before = await page.evaluate(() => ({
+      y: scrollY,
+      heading: document.querySelector('h1')!.getBoundingClientRect().top,
+    }));
+    state.rows.unshift(app(8000));
+    await page.getByRole('button', { name: '刷新当前数据' }).evaluate((b) => b.click());
+    await page.locator('[data-library-row="8000"]').waitFor();
+    const after = await page.evaluate(() => ({
+      y: scrollY,
+      heading: document.querySelector('h1')!.getBoundingClientRect().top,
+    }));
+    assert.deepEqual(after, before, `top controls moved: ${JSON.stringify({ before, after })}`);
+  } finally {
+    await context.close();
+  }
+});
+
+test('frontend #25: detection, pending notices and failures never move the 817px viewport or change displayed rows', async () => {
+  const { context, page, state } = await fixture(false, true);
+  try {
+    await page.setViewportSize({ width: 817, height: 863 });
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: '应用库', exact: true })
+      .waitFor();
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(80);
+    const initial = await page.evaluate(() => ({
+      y: scrollY,
+      table: document.querySelector('[data-library-table]')!.getBoundingClientRect().top,
+    }));
+    await page.evaluate(() => {
+      const win = window as any;
+      win.scrollCalls = 0;
+      const by = window.scrollBy.bind(window),
+        to = window.scrollTo.bind(window);
+      window.scrollBy = ((...args: any[]) => {
+        win.scrollCalls++;
+        return (by as any)(...args);
+      }) as typeof window.scrollBy;
+      window.scrollTo = ((...args: any[]) => {
+        win.scrollCalls++;
+        return (to as any)(...args);
+      }) as typeof window.scrollTo;
+    });
+    await page.clock.fastForward(15001);
+    await page.waitForTimeout(80);
+    assert.equal(await page.getByText('有新数据，当前清单保持不变。', { exact: true }).count(), 0);
+    state.rows.unshift(app(9000));
+    await page.clock.fastForward(15001);
+    await page.getByText('有新数据，当前清单保持不变。', { exact: true }).waitFor();
+    assert.equal((await queryKey(page))[0], '1');
+    assert.equal(await page.evaluate(() => (window as any).scrollCalls), 0);
+    state.failed = true;
+    await page.clock.fastForward(15001);
+    await page.getByRole('alert').filter({ hasText: 'Fixture temporarily unavailable' }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        y: scrollY,
+        table: document.querySelector('[data-library-table]')!.getBoundingClientRect().top,
+      })),
+      initial,
+    );
+    assert.equal(await page.evaluate(() => (window as any).scrollCalls), 0);
+    state.failed = false;
+    await page.getByRole('button', { name: '更新清单', exact: true }).evaluate((b) => b.click());
+    await page.locator('[data-library-row="9000"]').waitFor();
+    assert.equal(await page.evaluate(() => scrollY), 0);
   } finally {
     await context.close();
   }

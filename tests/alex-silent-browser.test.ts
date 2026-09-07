@@ -6,21 +6,26 @@ let harness: Awaited<ReturnType<typeof alexBrowserHarness>>;
 before(async () => { harness = await alexBrowserHarness(); });
 after(async () => { await harness?.close(); });
 
-test('Alex SR-01: two real 15-second polls update content without removing table, pagination, or editing focus', { timeout: 55000 }, async () => {
+test('Alex LRR supersedes SR-01: two real 15-second polls stage content without removing table, pagination, or editing focus', { timeout: 55000 }, async () => {
   const { context, page, state } = await harness.fixture();
   try {
     const table = page.locator('[data-library-table]');
     await table.evaluate(node => { (node as HTMLElement & { alexIdentity: string }).alexIdentity = 'stable'; });
     await page.getByLabel('搜索应用', { exact: true }).focus();
     const baseline = state.calls.length;
-    state.rows[0].title = 'Automatically refreshed once';
-    await page.getByText('Automatically refreshed once', { exact: true }).waitFor({ timeout: 18000 });
-    state.rows[0].title = 'Automatically refreshed twice';
-    await page.getByText('Automatically refreshed twice', { exact: true }).waitFor({ timeout: 18000 });
+    state.rows[0].title = 'Pending first poll';
+    await page.getByRole('button', { name: '更新清单', exact: true }).waitFor({ timeout: 18000 });
+    assert.equal(await page.getByText('Pending first poll', { exact: true }).count(), 0);
+    state.rows[0].title = 'Pending second poll';
+    await page.waitForTimeout(15500);
+    assert.equal(await page.getByText('Pending second poll', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('Loan Marker 1', { exact: true }).count(), 1);
     assert.ok(state.calls.length >= baseline + 2);
     assert.equal(await table.evaluate(node => (node as HTMLElement & { alexIdentity: string }).alexIdentity), 'stable');
     assert.equal(await page.getByRole('button', { name: '下一页', exact: true }).count(), 1);
     assert.equal(await page.getByLabel('搜索应用', { exact: true }).evaluate(node => document.activeElement === node), true);
+    await page.getByRole('button', { name: '更新清单', exact: true }).evaluate(button => button.click());
+    await page.getByText('Pending second poll', { exact: true }).waitFor();
     state.failed = true;
     await page.getByRole('button', { name: '刷新当前数据', exact: true }).evaluate(button => button.click());
     await page.getByRole('alert').filter({ hasText: 'Alex synthetic refresh failure' }).waitFor();

@@ -133,9 +133,9 @@ const date = (v: unknown, full = false) => {
           : { year: 'numeric', month: '2-digit', day: '2-digit' },
       ).format(d);
 };
-const relative = (v: unknown) => {
+const relative = (v: unknown, now = Date.now()) => {
   if (!v) return '尚未采集';
-  const mins = Math.floor((Date.now() - +new Date(String(v))) / 60000);
+  const mins = Math.floor((now - +new Date(String(v))) / 60000);
   return mins < 1
     ? '刚刚'
     : mins < 60
@@ -728,9 +728,17 @@ function AppsPage({
   const { country, store, classification, loanVerdict, q, search, offset } = view;
   const path =
     '/apps' + query({ country, store, classification, loanVerdict, q: search, limit: 20, offset });
+  const actionGeneration = useRef(0);
+  const activePath = useRef(path);
+  activePath.current = path;
+  const [updating, setUpdating] = useState(false),
+    [updateError, setUpdateError] = useState('');
   const viewRef = useRef(view);
   viewRef.current = view;
   const change = (updates: Partial<AppsViewState>, reset = true) => {
+    actionGeneration.current++;
+    setUpdating(false);
+    setUpdateError('');
     reading.current = null;
     onViewChange({ ...viewRef.current, ...updates, ...(reset ? { offset: 0 } : {}) });
   };
@@ -745,18 +753,86 @@ function AppsPage({
     const timer = setTimeout(() => change({ search: q }), 250);
     return () => clearTimeout(timer);
   }, [q, search]);
-  const { data, error, loading } = useData<{ apps: MarketApp[]; total: number }>(path, version);
-  useLayoutEffect(() => {
-    if (!data) return;
-    if (offset > 0 && offset >= data.total) {
-      const next = Math.max(0, Math.floor((data.total - 1) / 20) * 20);
-      reading.current = null;
-      onViewChange({ ...viewRef.current, offset: next });
-      return;
+  type LibraryResult = { apps: MarketApp[]; total: number };
+  const { data, error, loading, hasPending, displayedAt } = useData<LibraryResult>(path);
+  async function applyDisplay(fetchLatest: boolean) {
+    const origin = path,
+      initialView = viewRef.current,
+      generation = ++actionGeneration.current;
+    const current = () => activePath.current === origin && actionGeneration.current === generation;
+    setUpdating(true);
+    setUpdateError('');
+    try {
+      if (fetchLatest) await sessionQueries.fetch(origin);
+      if (!current()) return;
+      let target = origin,
+        targetOffset = initialView.offset,
+        recoverySteps = 0;
+      let snapshot = sessionQueries.read<LibraryResult>(target);
+      if (fetchLatest && snapshot.error) throw new Error(snapshot.error);
+      let latest = snapshot.hasPending ? snapshot.pendingData : snapshot.data;
+      if (!latest) return;
+      // Resolve the valid page before replacing any displayed rows/total/page.
+      // This preserves the old view if the replacement request fails or is slow.
+      while (targetOffset > 0 && targetOffset >= latest.total) {
+        targetOffset =
+          recoverySteps++ === 0 ? Math.max(0, Math.floor((latest.total - 1) / 20) * 20) : 0;
+        target =
+          '/apps' +
+          query({
+            country: initialView.country,
+            store: initialView.store,
+            classification: initialView.classification,
+            loanVerdict: initialView.loanVerdict,
+            q: initialView.search,
+            limit: 20,
+            offset: targetOffset,
+          });
+        await sessionQueries.fetch(target);
+        if (!current()) return;
+        snapshot = sessionQueries.read<LibraryResult>(target);
+        if (snapshot.error) throw new Error(snapshot.error);
+        latest = snapshot.hasPending ? snapshot.pendingData : snapshot.data;
+        if (!latest) throw new Error('有效页面尚未返回，请重试更新');
+      }
+      if (!current()) return;
+      sessionQueries.applyPending(target);
+      if (target !== origin) {
+        reading.current = null;
+        onViewChange({ ...viewRef.current, offset: targetOffset });
+      }
+    } catch (e) {
+      if (current()) setUpdateError((e as Error).message);
+    } finally {
+      if (current()) setUpdating(false);
     }
+  }
+  useEffect(() => {
+    setUpdating(false);
+    setUpdateError('');
+  }, [path]);
+  const lastRefreshVersion = useRef(version);
+  useEffect(() => {
+    if (lastRefreshVersion.current !== version) {
+      lastRefreshVersion.current = version;
+      void applyDisplay(true);
+    }
+  }, [version]);
+  useEffect(
+    () => () => {
+      actionGeneration.current++;
+    },
+    [],
+  );
+  useLayoutEffect(() => {
+    if (!data || (offset > 0 && offset >= data.total)) return;
     if (reading.current?.queryKey === path) restoreLibraryReading(reading.current);
     reading.current = captureLibraryReading(path);
-  }, [data, path, offset, error]);
+  }, [data, path, offset]);
+  useEffect(() => {
+    if (data && offset > 0 && offset >= data.total) void applyDisplay(false);
+  }, [data, path, offset]);
+  const visibleError = updateError || error;
   useEffect(() => {
     const capture = () => {
       if (data) reading.current = captureLibraryReading(path);
@@ -844,7 +920,32 @@ function AppsPage({
             ))}
           </select>
         </Filters>
-        {error && data && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
+        <div className="library-update-slot">
+          <div className="library-update-copy">
+            <span role="status">
+              {updating
+                ? '正在更新，当前清单保持不变。'
+                : hasPending
+                  ? '有新数据，当前清单保持不变。'
+                  : '当前清单保持不变 · 每 15 秒检查新数据'}
+            </span>
+            <span
+              className="library-refresh-error"
+              role={visibleError && data ? 'alert' : undefined}
+              title={visibleError || undefined}
+            >
+              {visibleError && data ? `${visibleError}；保留当前清单，将继续检查。` : ''}
+            </span>
+          </div>
+          <button
+            className="button secondary"
+            style={{ visibility: hasPending ? 'visible' : 'hidden' }}
+            disabled={!hasPending || updating}
+            onClick={() => void applyDisplay(false)}
+          >
+            更新清单
+          </button>
+        </div>
         {error && !data ? (
           <ErrorBox message={error} />
         ) : loading && !data ? (
@@ -925,7 +1026,9 @@ function AppsPage({
                         {date(app.firstSeenAt)}
                         <small>商店发布 {date(app.releasedAt)}</small>
                       </td>
-                      <td className="muted">{relative(app.lastFetchedAt)}</td>
+                      <td className="muted">
+                        {relative(app.lastFetchedAt, displayedAt ?? undefined)}
+                      </td>
                       <td>
                         <button
                           className="icon-button"
@@ -2075,6 +2178,8 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
           {nav.map((n) => (
             <button
               key={n.id}
+              aria-label={n.label}
+              title={n.label}
               className={page === n.id ? 'active' : ''}
               onClick={() => navigate(n.id)}
             >
