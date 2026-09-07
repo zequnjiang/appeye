@@ -56,3 +56,15 @@ Alex独立工程回归通过后，CEO可进行已授权的单writer受控部署�
 ## 正式 CTO 交接
 
 2026-09-07：#18后端、前端集成、CLI/cohort兼容及新增手动来源保护实现已完成，自检169项和全部类型/构建通过，源码冻结交Alex。无已知工程阻断项；待Alex独立最终检查后，可由CEO执行已授权受控部署。仍待真实迁移/限定7页恢复/88项覆盖合并/首小时运行及旧批次继续推进的证据，最终验收权属于PM。本工程交接不提前关闭#18或未完成的#11。
+
+## 部署启动阻塞：响应证明索引补修（#18）
+
+169项工程回归通过后，首次真实服务启动暴露大数据规模缺口：coalesce证明查询对full_scan_responses缺少task索引，启动事务中反复倒序扫描大响应表，服务尚未listen。2026-09-07 09:01:42Z CTO只读原SQL EXPLAIN确认 `SCAN r`、该表0索引、44reviews+44enrich仍queued；1秒只读进程sample中779个SQLite Get调用栈采样、763个位于pread，支持本地数据库读取为阻塞点。没有以此宣称HTTP源故障。证据为ignored `data/batches/finance-2026-09-07-coalesce-startup-plan.json` 与 `.artifacts/coalesce-startup-sample.txt`。CEO已受控停止进程，未提交的coalesce事务回滚，原006迁移/7页恢复证据保持。
+
+最小修复只有 `ensureFullScanSchema` 一条幂等DDL：`CREATE INDEX IF NOT EXISTS full_scan_response_task_time ON full_scan_responses(task_id,observed_at,id)`。放在可选批次表创建之后，兼容新库、已有库和重复启动；不改已部署006，不改原证明SQL、成功条件、合并事务、分页、计数、限速或业务数据。只读status路径仍不调用ensure、不建索引。
+
+CTO隔离8000响应/265105408字节合成数据库，逐条完整响应为28–36KB，执行与源码一致的352条证明查询。索引前三轮1777.52/1805.03/1842.27ms；索引后三轮25.79/25.41/25.17ms。所有查询完整返回值逐轮SHA256全等，查询计划变为 `SEARCH r USING INDEX full_scan_response_task_time (task_id=? AND observed_at=?)`，attempt仍按主键关联。隔离索引307200字节、构建6.37ms；这些是隔离条件下的结果，不能外推生产30GB构建耗时或整体吞吐。合成库已清理，小摘要保存在ignored `data/batches/finance-2026-09-07-coalesce-index-isolated.json`。
+
+Alex补充3项独立目标回归：原SQL全等、较新failed attempt不能替代成功proof、错时间/内容无结果、完整ledger不变；重复ensure和文件重开不变；第一次job更新后第二次触发异常使全部合并回滚，再恢复可全部完成。目标manual9/9通过。最终全检结果见下条补记，真实索引构建与服务重新启动由CEO单writer执行，CTO未写生产库。
+
+补修最终自检：`npm run check` **172/172通过**，前后端类型、Vite/server构建及迁移复制通过，`git diff --check`通过。日志`.artifacts/coalesce-startup-cto-check.log`。CTO再次冻结最小源码并正式交Alex独立最后验证，允许CEO在其通过后按锁保护维护步骤部署索引。

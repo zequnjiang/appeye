@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCollectionCoordinator } from '../server/collection-coordinator.js';
-import { createFullScanRunner } from '../server/full-scan.js';
+import { createFullScanRunner, ensureFullScanSchema } from '../server/full-scan.js';
+import { createStore } from '../server/db.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { coalesceCoveredJobs, createManualJournal } from '../server/manual-collection.js';
 import {
   hourlyStore,
@@ -490,6 +494,140 @@ test('HMA-06/11: an older batch page remains observed and auditable but does not
     assert.equal(store.one('SELECT COUNT(*) n FROM full_scan_review_seen')!.n, 1);
     assert.equal(JSON.parse(task.response).data[0].text, old.text);
     assert.deepEqual(store.all('SELECT * FROM reviews'), current);
+  } finally {
+    store.close();
+  }
+});
+
+const coveredResponseSql =
+  "SELECT r.* FROM full_scan_responses r JOIN full_scan_attempts a ON a.id=r.attempt_id AND a.task_id=r.task_id WHERE r.task_id=? AND r.observed_at=? AND r.response=? AND a.status='succeeded' ORDER BY r.id DESC LIMIT 1";
+
+test('HMA-05/06: response lookup index removes the ledger scan while preserving the exact source and successful-attempt predicate', async () => {
+  const { store, job, batchId } = await coveredFixture();
+  try {
+    const index = 'full_scan_response_task_time';
+    assert.ok(store.one("SELECT name FROM sqlite_master WHERE type='index' AND name=?", index));
+    assert.deepEqual(
+      store.all(`PRAGMA index_info(${index})`).map((r) => r.name),
+      ['task_id', 'observed_at', 'id'],
+    );
+    store.db.exec(`DROP INDEX ${index}`);
+    const task = store.one("SELECT * FROM full_scan_tasks WHERE kind='reviews'")!;
+    const params = [task.id, task.response_at, task.response];
+    const other = store.one('SELECT * FROM full_scan_responses WHERE task_id!=? LIMIT 1', task.id)!;
+    const unrelated = JSON.stringify({ syntheticPadding: 'x'.repeat(64 * 1024) });
+    store.transaction(() => {
+      for (let i = 0; i < 80; i++)
+        store.run(
+          'INSERT INTO full_scan_responses(task_id,attempt_id,observed_at,response) VALUES(?,?,?,?)',
+          other.task_id,
+          other.attempt_id,
+          other.observed_at,
+          unrelated,
+        );
+    });
+    const failedAttempt = store.run(
+      "INSERT INTO full_scan_attempts(task_id,attempt,started_at,finished_at,status,error) VALUES(?,99,?,?,'failed','Synthetic attempt failure')",
+      task.id,
+      task.response_at,
+      task.response_at,
+    ).lastInsertRowid;
+    store.run(
+      'INSERT INTO full_scan_responses(task_id,attempt_id,observed_at,response) VALUES(?,?,?,?)',
+      task.id,
+      failedAttempt,
+      task.response_at,
+      task.response,
+    );
+    const rows = store.all('SELECT * FROM full_scan_responses ORDER BY id');
+    const beforePlan = store
+      .all('EXPLAIN QUERY PLAN ' + coveredResponseSql, ...params)
+      .map((r) => r.detail)
+      .join(' | ');
+    assert.match(beforePlan, /SCAN r/);
+    const before = store.one(coveredResponseSql, ...params)!;
+    ensureFullScanSchema(store);
+    const afterPlan = store
+      .all('EXPLAIN QUERY PLAN ' + coveredResponseSql, ...params)
+      .map((r) => r.detail)
+      .join(' | ');
+    assert.match(afterPlan, /SEARCH r USING INDEX full_scan_response_task_time/);
+    assert.doesNotMatch(afterPlan, /SCAN r/);
+    assert.deepEqual(store.one(coveredResponseSql, ...params), before);
+    assert.notEqual(before.attempt_id, Number(failedAttempt));
+    assert.equal(
+      store.one(coveredResponseSql, task.id, task.response_at + '-wrong', task.response),
+      undefined,
+    );
+    assert.equal(store.one(coveredResponseSql, task.id, task.response_at, '{}'), undefined);
+    assert.deepEqual(store.all('SELECT * FROM full_scan_responses ORDER BY id'), rows);
+    assert.equal(coalesceCoveredJobs(store, batchId), 1);
+    assert.equal(
+      JSON.parse(store.one('SELECT result FROM jobs WHERE id=?', job.id)!.result).proofs[0]
+        .responseId,
+      before.id,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('HMA-05/06: repeated schema initialization and file reopen retain the response index and all prior rows', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'appeye-response-index-'));
+  const path = join(dir, 'fixture.sqlite');
+  let store = createStore(path);
+  try {
+    ensureFullScanSchema(store);
+    const schema = store.all('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name');
+    const countries = store.all('SELECT * FROM countries ORDER BY code');
+    ensureFullScanSchema(store);
+    assert.deepEqual(
+      store.all('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name'),
+      schema,
+    );
+    store.close();
+    store = createStore(path);
+    ensureFullScanSchema(store);
+    assert.deepEqual(
+      store.all('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name'),
+      schema,
+    );
+    assert.deepEqual(store.all('SELECT * FROM countries ORDER BY code'), countries);
+    assert.ok(
+      store.one("SELECT name FROM sqlite_master WHERE name='full_scan_response_task_time'"),
+    );
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('HMA-06: interruption after one covered job update rolls the whole coalescing transaction back', async () => {
+  const { store, app, batchId } = await coveredFixture();
+  try {
+    const second = store.enqueueJob({
+      type: 'enrich',
+      country: 'th',
+      store: app.store,
+      appId: app.id,
+    });
+    store.run("UPDATE jobs SET created_at='2020-01-01T00:00:00.000Z' WHERE id=?", second.id);
+    const before = store.all('SELECT * FROM jobs ORDER BY id');
+    store.db.exec(
+      `CREATE TRIGGER synthetic_coalescing_failure BEFORE UPDATE ON jobs WHEN OLD.id=${second.id} AND NEW.status='succeeded' BEGIN SELECT RAISE(ABORT,'Synthetic mid-coalescing interruption'); END;`,
+    );
+    assert.throws(
+      () => coalesceCoveredJobs(store, batchId),
+      /Synthetic mid-coalescing interruption/,
+    );
+    assert.deepEqual(store.all('SELECT * FROM jobs ORDER BY id'), before);
+    store.db.exec('DROP TRIGGER synthetic_coalescing_failure');
+    assert.equal(coalesceCoveredJobs(store, batchId), 2);
+    assert.ok(
+      store
+        .all('SELECT status,result FROM jobs')
+        .every((r) => r.status === 'succeeded' && JSON.parse(r.result).coalesced),
+    );
   } finally {
     store.close();
   }
