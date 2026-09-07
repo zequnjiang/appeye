@@ -1,8 +1,8 @@
 # 每小时应用监测与市场动态
 
-- 状态：PM Ready，待 CTO 实现、自检及 Alex 独立测试后进行 PM 验收。
+- 状态：**HMA-AC-01–14已全部通过PM最终验收**。最终172项独立回归、类型/构建、真实小时/批次协调运行和launchd重启验证通过；允许CEO完成报告发布/最新CI后合并#19并关闭#18及启动索引缺陷#20。原全量运营#11继续OPEN。见[PM最终报告](../reports/HOURLY-MARKET-ACTIVITY-PM-ACCEPTANCE.md)。
 - 需求日期：2026-09-07（Asia/Shanghai）。
-- GitHub：[需求 #18](https://github.com/zequnjiang/appeye/issues/18)；分支 `codex/hourly-market-activity`。
+- GitHub：[需求 #18](https://github.com/zequnjiang/appeye/issues/18)、[PR #19](https://github.com/zequnjiang/appeye/pull/19)；分支 `codex/hourly-market-activity`。
 - 依赖：[MVP](MVP.md)、[V0.2](V0.2.md)、[协作流程](../workflow.md)。同时继续 [全量采集 #11](https://github.com/zequnjiang/appeye/issues/11)，不将本需求的交付等同于该批次完成。
 
 ## 目标与采集范围
@@ -68,4 +68,6 @@ API 路径由 CTO 选择，最少支持事件类型、日期、国家、商店�
 
 ## 交接与完成条件
 
-CTO 先交付调度协调方案、实际 API 结构、实现和自检；Alex 验证业务口径、进程互斥/公平、重启/失败边界及页面。PM 在正式报告完成后独立验收。CEO 管理正式运行进程、备份、GitHub 发布及两个需求各自的关闭；当前文档只表示需求可开发，未代表功能通过或已上线。
+CTO 先交付调度协调方案、实际 API 结构、实现和自检；Alex 验证业务口径、进程互斥/公平、重启/失败边界及页面。PM 在正式报告完成后独立验收。CEO 管理正式运行进程、备份、GitHub 发布及两个需求各自的关闭。
+
+2026-09-07本需求已完成上述流程，业务基线 `a33cfb8` 的精确CI通过，真实服务已运行并通过受控重启核查。[启动索引缺陷#20](https://github.com/zequnjiang/appeye/issues/20)单独验收通过。此结论不表示首个小时周期的全部详情已完成，也不替代仍在继续的#11评论终验；60分钟调度边界由确定性时钟测试覆盖，真实证据明确记录首周期和重启后的持续推进。
