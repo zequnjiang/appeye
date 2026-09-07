@@ -56,7 +56,8 @@ test('V0.2 migration: V0.1 observations, identities, settings, manual classifica
       assert.equal(store.getJob(42)?.error, 'Legacy upstream failure');
       assert.equal(store.getCountry('th')?.name, '泰国旧配置');
       assert.equal(store.getCountry('th')?.language, 'en');
-      assert.equal(store.getCountry('th')?.intervalHours, 48);
+      // HMA-AC-01: only the authorized cadence changes; all other legacy preferences remain checked.
+      assert.equal(store.getCountry('th')?.intervalHours, 1);
       assert.equal(store.getCountry('th')?.enabled, false);
       assert.deepEqual(store.getCountry('th')?.keywords, ['fixture loan']);
       assert.equal(

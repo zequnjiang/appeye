@@ -84,3 +84,27 @@ FROM changes c ORDER BY c.observed_at DESC LIMIT 100;
 每种补充资料保存当前成功数据和每次尝试历史。成功空结果与 failed/unsupported 不同；后两者保留先前成功数据、原成功时间及原上下文，并单独记录新错误、尝试时间与尝试上下文。部分失败不会将主详情标为失败，也不会阻止其余补充类型保存。没有采集记录时前端显示未采集，不使用空列表冒充成功。
 
 规则引擎是带原文证据的启发式提取，不是法律裁定。new/auto 应用可因 strong 结果变为 confirmed，其余 candidate；manual/legacy 永不被规则覆盖。切换自动模式必须显式调用 classificationMode:auto。loanVerdict 筛选可查看旧应用的自动分析而不改动其历史判断。分析时间与原文观测时间独立保存，证据评分不宣称统计概率。
+
+## 小时周期与全量批次协调（#18）
+
+`server/index.ts` 在打开 SQLite 前获取与 CLI 共用的进程所有权锁，之后只有一个 `collection-coordinator` 调用三个执行通道：小时任务最多3项、全量任务1项、手动任务1项；没有可执行任务的通道让出槽位。全量 runner 只恢复已经 seed 的批次，不重新 seed；历史2,024个市场成员、响应、评论游标和限定恢复预算保持。新的小时成员归 `monitor_*` 表，不进入原批次分母。
+
+唯一 `createFullScanProviders` 实例供三个通道共用。默认全局HTTP起始间隔500ms，iTunes search/lookup独立至少3100ms，429遵循Retry-After，所有原始HTTP按当前通道归档。Apple小时详情复用同周期/国家/冻结语言的50ID lookup；每条应用仍有独立任务、原始记录和实际返回时间，周期完成后释放该周期缓存。未启动第二个 legacy scheduler；保留手动任务原来的评论与补充语义。
+
+006 migration 新增 monitor_state/cycles/tasks/attempts/responses/http/sources、manual_responses 与查询索引，并将现有国家 interval_hours 设为1。小时周期每60分钟持久安排，每个周期按国家/商店/来源或应用去重；存在活跃周期时不追加下一批，逾期可见，完成后只合并安排最新到期窗口。停用国家的 queued 自动任务记 skipped，运行中的一次请求允许完成。启用国家主库全部分类（含 excluded）刷新详情，不派生历史评论/七类补充。
+
+发现使用公开有限窗口：GP三个财务榜、Apple六个财务榜、每个本地关键词的首搜索窗口（GP最多250，Apple最多50）；原始source/response/HTTP和窗口说明全部保留。新对象经过完整详情规则分析后 strong/possible 入主库，insufficient 只留小时账本；人工分类不变。任务默认3次尝试与指数退避，下一周期可再尝试失败项目。持久响应先写再应用；`saveObservation` 的事务内onSaved hook将快照与applied_response_id一起提交，避免中断重放重复变化及嵌套事务。
+
+正常服务会自动恢复最近仍有 queued/running 工作的已冻结批次；FULL_SCAN_BATCH_ID 可显式选择。CLI的 --retry-kind/--retry-task-ids/--retry-only 允许单writer维护时精确恢复失败页，保留原attempt记录且用 recoveryAttemptBase 提供新的有限预算。查询 --status 在取锁/打开写连接之前执行，继续保持严格只读。
+
+进程管理属于部署平台职责。进程退出或主机休眠时不会有后台执行保证；应用报告真实最后观测、队列与逾期，而不是宣称每个应用都已按时更新。
+
+跨通道观察以源 observed_at 排序，同一毫秒以持久snapshot ID作为稳定次序。较早预取/缓存响应仍写独立原快照和收据，但不覆盖更晚当前资料或规则分析，也不产生与未来快照比较的变化。后续新响应仍以最新成功快照为差异基准。小时和批次详情均使用持久响应ID完成原子快照收据，不能将同一毫秒的两个不同响应合并。
+
+采集进程锁在数据库真实路径旁的小型 `.full-scan.lock.sqlite` 使用持有整个进程生命周期的 `BEGIN EXCLUSIVE` OS锁，崩溃由操作系统释放；它不锁应用数据库。`.full-scan.lock` 的PID/nonce文件继续用于兼容旧CLI和运维查看，只有取得原子所有权后才能检查并清理死PID文件。
+
+`full-scan-audit.ts` 的详情/七补充/评论覆盖不再遍历当前全主库：以批次detail成员、本批其他任务和admission引用，并联合独立baseline应用ID形成预期范围。`--baseline` 同时支持旧 `apps` 与冻结 `members` 格式；后者额外报告超出冻结成员的ID。无baseline时明确不能验证连全部批次引用都丢失的初始成员。全库总量改为 `allDatabaseMainApps/allDatabaseReviewsRetained/allDatabaseSnapshotsRetained`，避免把后续小时合法新增误当旧批次漏采。
+
+旧手动评论/补充任务只有在请求早于批次，且同市场身份、语言、逐项更晚成功持久响应已完整覆盖时才合并。原created_at、attempts和所有批次历史保持，job.result记录coalesced、真实sourceObservedAt、task/response引用。缺失、失败、degraded、未完成或较晚手动请求不合并。评论引用首窗口依据，并要求整条批次流已成功终结；补充要求全部七类。
+
+后续手动app/reviews/enrich的完整规范响应及raw先写manual_responses，附job/attempt/app/国家/实际请求语言/原observed_at，HTTP仍固定原job_id。Store现有事务内hook将资料与applied_at收据原子提交；崩溃重放保原时间，已应用响应不重复写。迟到评论仍保原响应和seen，但不覆盖更新的current，实际写入数扣除skippedOlder。小时新入库对象的firstSeen跨所有已存monitor/fullscan暂存来源取最早真实发现日，不回写现有主库首次发现。

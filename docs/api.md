@@ -21,6 +21,10 @@ JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login
 | GET `/api/countries` | 无 | `{countries}` |
 | POST `/api/countries` | `{code,name,language,keywords,enabled?,intervalHours?}` | 201 `{country}` |
 | PATCH `/api/countries/:code` | 上述可选字段，不能修改 code | `{country}` |
+| GET `/api/market-activity` | `date,timeZone,country,store,classification,type,limit,offset` | `MarketActivityResponse`（见下文） |
+| GET `/api/collection/status` | 无 | `CollectionStatus`，实际小时队列、最新成功观测及批次状态 |
+| GET `/api/collection/tasks` | `limit,offset` | 小时任务分页、有限重试和结果；不包含大 HTTP 正文 |
+| GET `/api/collection/tasks/:id` | 正整数 ID | 任务、尝试、原响应及 HTTP 引用 |
 | GET `/api/apps` | `country,store,classification,q,limit,offset` | `{apps,total}` |
 | POST `/api/apps` | `{store,externalId,country}` | 201 `{app,job}` |
 | GET `/api/apps/:id` | 无 | `{app,snapshots,changes,reviews,limitations}` |
@@ -32,7 +36,7 @@ JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login
 
 分页默认 limit=100、offset=0，limit 为 1–1000。详情内嵌最近 50 个快照、100 条变化、50 条评论，需要更早记录时使用分页端点。`since` 是完整 ISO UTC 时间。
 
-国家 code 是小写两字母，language 是 2–3 字母语言代码或 locale，keywords 为 1–20 个非空关键词，intervalHours 为 1–720。`store` 为 `google-play`/`app-store`；人工 `classification` 为 `candidate`/`confirmed`/`excluded`。Google Play externalId 使用包名，App Store 使用数字商店 ID。重复手工添加不会产生第二个跟踪对象。
+国家 code 是小写两字母，language 是 2–3 字母语言代码或 locale，keywords 为 1–20 个非空关键词，intervalHours 固定为 1（每60分钟）。`store` 为 `google-play`/`app-store`；人工 `classification` 为 `candidate`/`confirmed`/`excluded`。Google Play externalId 使用包名，App Store 使用数字商店 ID。重复手工添加不会产生第二个跟踪对象。
 
 `stats`：apps、newApps7d、confirmed、candidates、changes7d、reviews、jobsFailed。国家行包含配置和上述按国家统计的 apps、confirmed、candidates、changes7d。
 
@@ -91,3 +95,17 @@ JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login
 应用还返回 `classificationSource:'auto'|'manual'|'legacy'`、`manualOverride:boolean`、`effectiveClassification` 和 `loanAnalysis`。classification/effectiveClassification 都是当前生效值。所有 V0.1 旧记录迁移为 legacy+override，原分类完全保留；新记录默认 auto，只有 strong 应用 confirmed，其余 candidate。人工决定始终优先。
 
 `loanAnalysis` 保存规则版本、真实分析时间 analyzedAt、原文观测时间 sourceObservedAt、证据评分 confidence（0–100，不是概率）、verdict、原文证据、披露、不同角色主体和来源。API 不把文字披露、名称或编号等同于持牌验证、法律合规或设备权限。规则详情见 `server/loan-identification.ts` 与版本化 `server/policy-catalog.json`。
+
+## 每小时监测与市场动态（#18）
+
+权威结构定义于 `server/market-activity.ts`。`type` 为 `all|firstSeen|storeRelease|observedUpdate`；默认分页50，最多200。固定 `timeZone=Asia/Shanghai`，不支持其他值；日期为有效 `YYYY-MM-DD`，缺省北京时间今天。响应包含 `dateMode:'business-timezone'`、实际 `date/timeZone/windowStart/windowEnd`，后端以含开始、不含结束的边界过滤。
+
+`counts` 是不受所选 type 页签影响的各类型唯一应用数，`eventCounts` 是各类型事件数。两者同时受日期/国家/商店/当前分类过滤；`total` 和 `uniqueApps` 分别是所选类型的事件总数与唯一市场应用数。相同包在不同国家独立计数。变化事件按一次快照分组，`changes` 提供原值/新值、原 change ID，`snapshotId` 可追溯快照。
+
+`firstSeen` 依据首次发现时间；`storeRelease` 只使用仍保留原值的商店 released/releaseDate。日历日期精度返回 `releasedAtPrecision:'date'` 和 `releasedAt:'YYYY-MM-DD'`，`eventAt:null`，不制造发布时间；有明确时区的发布时间按业务日界过滤。`releasedAtRaw` 保留原值，`observedAt` 是取得这条资料的观察时间。首次快照不产生更新；空值变化可审计，但 `versionChanged` 只标记不同的有效版本转变。
+
+国家配置的 `intervalHours` 在006迁移时统一为1，API之后只接受1；语言、关键词、启停和人工分类保留。`CollectionStatus.lastSuccessAt` 是主库真实最后成功详情时间；排队和周期触发不更新它。`nextDueAt/overdue/overdueApps/activeCycle` 体现延迟。状态路由本身不调度、不迁移、不联网；没有同进程协调器时标识 external/disabled，演示标识 demo。
+
+手动通道接管时，批次开始前排队的评论/补充任务，仅在同身份、请求上下文和更晚的完整持久响应能证明覆盖时合并。`job.result.coalesced=true`，附 `batchId`、`coverage`、原 `sourceObservedAt` 和逐项 `proofs[{taskId,responseId,kind,sourceObservedAt}]`；这不表示刚刚请求商店。新手动成功响应保存在 `manual_responses`，评论任务结果含 `responseId/sourceObservedAt/upserted/skippedOlder/replayed`。旧缓存不能覆盖更新的评论，`upserted` 为实际写入数，重放收据不重复应用。
+
+新小时对象首次进入主库时，firstSeen追溯同国家/商店/外部ID全历史暂存来源的最早真实观测，包含早先insufficient阶段与旧批次发现；不能用首次strong或分析时间替代。已有主库firstSeen保持。首次发现事件的 `observedAt` 来自最早成功详情快照，尚无快照则null，与发现时间分开。

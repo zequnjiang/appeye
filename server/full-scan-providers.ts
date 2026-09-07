@@ -35,6 +35,7 @@ export interface ScanPage<T> {
   requestLanguage?: string | null;
 }
 export interface ScanProvider {
+  releaseDetailCache?(batchId: string): void;
   list(input: ProviderContext & { collection: string }): Promise<ScanPage<NormalizedApp>>;
   search(
     input: ProviderContext & { keyword: string; page: number },
@@ -325,6 +326,12 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
       };
     };
     return {
+      releaseDetailCache(batchId) {
+        for (const key of bulkCache.keys())
+          if (JSON.parse(key)[0] === batchId) bulkCache.delete(key);
+        for (const key of bulkAttempted.keys())
+          if (JSON.parse(key)[0] === batchId) bulkAttempted.delete(key);
+      },
       app: individualApp,
       ...(store === 'app-store' &&
       appleBatchSize > 0 &&

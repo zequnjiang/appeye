@@ -2,7 +2,7 @@
 
 面向信贷行业的应用市场观察后台。用 Node.js 与 `@mradex77/google-play-scraper`、`@perttu/app-store-scraper` 发现和持续跟踪应用，比较版本、基本信息、评分、安装量与评价样本。
 
-初始市场：泰国（TH）、墨西哥（MX）、菲律宾（PH）、巴基斯坦（PK）、印度尼西亚（ID）、阿根廷（AR）。国家、语言、关键词与采集周期均可在后台增改。
+初始市场：泰国（TH）、墨西哥（MX）、菲律宾（PH）、巴基斯坦（PK）、印度尼西亚（ID）、阿根廷（AR）。国家、语言、关键词及启停可在后台增改；启用国家统一每 60 分钟安排发现和详情刷新。
 
 ## 快速启动
 
@@ -17,7 +17,7 @@ npm run dev
 
 打开 [本机后台](http://127.0.0.1:5173)，用 `.env` 中的管理员密码登录。开发 API 地址为 `http://127.0.0.1:3000`；Vite 会代理 `/api`，页面与 API 共享认证。密码和真实数据库不会提交到 Git。
 
-正式数据初始为空。默认 `AUTO_SCHEDULE=true`，启动并设置密码后，worker 根据启用国家的周期创建任务。希望先查看配置再采集时，将 `.env` 的 `AUTO_SCHEDULE` 设为 `false`，在后台点击“发现应用”。这只暂停自动排程，不妨碍手动任务执行。
+正式数据初始为空。默认 `AUTO_SCHEDULE=true`，启动并设置密码后，产品内协调器立即安排一次发现和详情刷新，后续每 60 分钟安排。希望先查看配置再采集时，将 `.env` 的 `AUTO_SCHEDULE` 设为 `false`；这暂停小时任务，手动任务和已经冻结的全量批次仍可执行。暂停国家会跳过尚未开始的自动小时任务，已进行的单次请求可以完成。
 
 ## 演示后台
 
@@ -39,15 +39,16 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-生产服务在 [本机 3000 端口](http://127.0.0.1:3000) 同时提供后台与 API；迁移随构建复制，在启动时执行。默认监听本机。长期运行需要保持 Node 进程与数据目录，建议交给 systemd 等进程管理器；本项目尚未部署到云服务器。只支持一个服务进程/worker，不能用集群模式同时打开同一数据库。对外提供访问时，用 HTTPS 反向代理，并配置精确的 `ALLOWED_ORIGINS` 和 `COOKIE_SECURE=true`。
+生产服务在 [本机 3000 端口](http://127.0.0.1:3000) 同时提供后台与 API；迁移随构建复制，在启动时执行。默认监听本机。长期运行应由所在平台的进程管理器保持 Node 进程运行（Linux 可用 systemd，macOS 可用 launchd）；本项目没有安装系统服务或部署云服务器。进程停止、机器休眠或断网期间不能保证准时采集；恢复时合并错过的周期，并展示排队与逾期状态。CLI 与服务共享数据库旁 `.full-scan.lock`，不能以集群或双进程同时采集。对外提供访问时，用 HTTPS 反向代理，并配置精确的 `ALLOWED_ORIGINS` 和 `COOKIE_SECURE=true`。
 
 ## 后台能力
 
 - 市场概览：国家覆盖、自动或人工确认分类、近期变化和采集运行情况。
+- 市场动态：按北京时间自然日分别查看系统首次发现、商店披露发布和实际观测变化，区分应用数与事件数，提供完整前后值与采集时间。
 - 应用库：国家/商店/分类/识别证据过滤，名称/开发者/ID 搜索，手动添加应用，CSV 导出。
 - 详情：公司与开发者、商店完整字段、权限与隐私、版本历史、评分分布、截图、评论原始信息，以及可翻页的快照、搜索发现和补充采集历史。
 - 信贷识别：六国语言启发式规则，展示描述原文、主体声明、APR/利率/费用/期限证据、适用政策与版本。人工分类优先，可明确切回自动模式。
-- 市场设置：扩展国家、当地语言关键词、启停和采集周期。
+- 市场设置：扩展国家、当地语言关键词及启停；统一 60 分钟详情监测。
 - 任务中心：持久队列、进度、错误、有限重试、手动重试与重启恢复。
 - 管理员认证：HttpOnly 签名会话、服务端撤销、来源检查和登录限速。
 
@@ -79,7 +80,18 @@ SQLite WAL + 明确 SQL 迁移，规范字段和原始 JSON 并存。表名：`c
 FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --serve
 ```
 
-同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项，`--retry-warnings` 仅重试原始响应可被已验证布局适配恢复的 Google Play 开发者目录告警，保留原尝试和数据历史。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。批次结束后，用 `NODE_ENV=production npm start` 恢复普通服务。
+同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项，`--retry-warnings` 仅重试原始响应可被已验证布局适配恢复的 Google Play 开发者目录告警，保留原尝试和数据历史。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。
+
+要让小时监测与未完成的批次共同运行，停止独立 CLI 后启动 `NODE_ENV=production npm start`。服务自动恢复最近已有待执行任务、已冻结范围的批次；可用 `FULL_SCAN_BATCH_ID` 指定既有批次。协调器最多执行 3 个小时任务后给已就绪批次 1 个任务，再给手动队列 1 个任务；空队列让出槽位。所有路径共用全局 HTTP 限速和 iTunes 至少 3100 ms 的额外间隔。小时详情不自动派生评论或七类补充，小时发现也不扩张旧批次成员。
+
+精确恢复特定失败页时，先停止服务并备份，使用带范围的维护命令。它保留旧尝试序号、响应和历史，仅给所选失败任务新的有限尝试预算；成功任务不重排，其他批次或错误类型的 ID 会拒绝：
+
+```bash
+FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --retry-failed --retry-kind reviews --retry-task-ids 49999,50000,50001,50002,50003,50004,50005 --retry-only
+NODE_ENV=production npm start
+```
+
+`--retry-only` 不发采集请求，执行后退出并释放锁；它是显式的一轮维护操作，不应加入周期命令。独立 CLI 的 `--serve` 仅提供查询后台，小时监测由正常服务内的协调器运行。
 
 `--retry-developer-source-errors` 是单独的显式恢复入口：仅对本批次已保存的最后一次续页满足 HTTP 200、`qnKhOb` 空 payload、`PlayDataError` code 5 的 Google Play 部分开发者目录开启一轮恢复。任务保存本轮标识、原因、旧 HTTP 引用与累计尝试序号；重复启动同一开关不会自动开启第二轮。若再次取得部分目录和同一来源错误，保留 `developer-degraded` 告警并结束本轮；网络异常仍使用既有有限重试预算。这不是对上游 code 5 的修复，也不保证获得完整目录，不扩大 `--retry-warnings` 的原范围。
 
@@ -113,3 +125,5 @@ CEO 负责调度和最终交付；PM 编写需求与验收标准；CTO 实现并
 若商店采集失败，先在任务详情查看错误，再检查网络、国家配置与上游接口。不要运行 `npm audit fix --force` 自动降级用户指定采集库。
 
 V0.2 需求与验收：[需求 #7](https://github.com/zequnjiang/appeye/issues/7)、[依赖迁移 #5](https://github.com/zequnjiang/appeye/issues/5)、[完整信息 #8](https://github.com/zequnjiang/appeye/issues/8)、[信贷识别 #9](https://github.com/zequnjiang/appeye/issues/9)。范围及验收标准见 [V0.2 需求](docs/requirements/V0.2.md)。
+
+每小时监测的本机常驻部署、launchd示例与停止/恢复步骤见[本机服务操作](docs/operations/LOCAL-SERVICE.md)。模板本身不代表已安装服务；实际运行状态以部署报告和产品监测状态为准。

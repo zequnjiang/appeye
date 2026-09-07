@@ -59,11 +59,11 @@ test('AC-03/05/10: valid configuration/manual tracking/classification work and i
   const h = await harness();
   try {
     await h.login();
-    const country = { code: 'vn', name: '越南', language: 'vi', keywords: ['vay', 'vay', 'tín dụng'], enabled: false, intervalHours: 36 };
+    const country = { code: 'vn', name: '越南', language: 'vi', keywords: ['vay', 'vay', 'tín dụng'], enabled: false, intervalHours: 1 };
     assert.equal((await h.http.request('/api/countries', { method: 'POST', body: JSON.stringify(country) })).status, 201);
     assert.deepEqual(h.store.getCountry('vn')?.keywords, ['vay', 'tín dụng']);
     assert.equal((await h.http.request('/api/countries', { method: 'POST', body: JSON.stringify(country) })).status, 409);
-    for (const body of [{ ...country, code: 'abc' }, { ...country, code: 'us', intervalHours: 0 }, { ...country, code: 'us', keywords: [] }]) assert.equal((await h.http.request('/api/countries', { method: 'POST', body: JSON.stringify(body) })).status, 400);
+    for (const body of [{ ...country, code: 'abc' }, { ...country, code: 'us', intervalHours: 0 }, { ...country, code: 'us', intervalHours: 24 }, { ...country, code: 'us', keywords: [] }]) assert.equal((await h.http.request('/api/countries', { method: 'POST', body: JSON.stringify(body) })).status, 400);
     const input = { store: 'google-play', country: 'th', externalId: 'fixture.example.credit' };
     const added = await h.http.request('/api/apps', { method: 'POST', body: JSON.stringify(input) });
     assert.equal(added.status, 201);
