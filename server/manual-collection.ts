@@ -228,7 +228,7 @@ export function earliestKnownDiscovery(
   fallback: string,
 ): string {
   const candidates = [fallback];
-  for (const table of ['monitor_sources', 'full_scan_sources']) {
+  for (const table of ['monitor_sources', 'full_scan_sources', 'discovery_sources']) {
     if (!store.one("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table)) continue;
     const row = store.one(
       `SELECT MIN(observed_at) observed_at FROM ${table} WHERE country=? AND store=? AND external_id=?`,

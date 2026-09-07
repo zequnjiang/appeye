@@ -1,6 +1,7 @@
 import googlePlay from '@mradex77/google-play-scraper';
 import * as apple from '@perttu/app-store-scraper';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { normalizeDeveloperContinuation } from './developer-continuation.js';
 import { decodeGoogleDeveloperId, googleDeveloperRequestUrl } from './developer-route.js';
 import { describeTransportError } from './transport-error.js';
@@ -33,6 +34,23 @@ export interface ScanPage<T> {
   stopReason?: string;
   warnings?: unknown[];
   requestLanguage?: string | null;
+  coverage?: {
+    requestedLimit: number | null;
+    returnedCount: number;
+    tokenAvailability: 'not-exposed';
+    restartMode: 'from-head-with-identity-deduplication' | 'single-window' | 'not-applicable';
+    sourceKind?: 'search' | 'similar-cluster' | 'same-page-links';
+  };
+}
+/** Partial rows remain usable evidence even when a later page is malformed. */
+export class ScanSourceError extends Error {
+  constructor(
+    message: string,
+    public readonly partial?: ScanPage<NormalizedApp>,
+  ) {
+    super(message);
+    this.name = 'ScanSourceError';
+  }
 }
 export interface ScanProvider {
   releaseDetailCache?(batchId: string): void;
@@ -40,6 +58,14 @@ export interface ScanProvider {
   search(
     input: ProviderContext & { keyword: string; page: number },
   ): Promise<ScanPage<NormalizedApp>>;
+  extendedSearch?(
+    input: ProviderContext & {
+      keyword: string;
+      limit: number;
+      onItem?: (data: NormalizedApp, source: string) => void;
+    },
+  ): Promise<ScanPage<NormalizedApp>>;
+  related?(input: ProviderContext & { externalId: string }): Promise<ScanPage<NormalizedApp>>;
   app: Provider['app'];
   appWithPeers?(
     input: ProviderContext & { externalId: string; batchId: string; peerExternalIds: string[] },
@@ -93,6 +119,7 @@ export interface FullScanProviderOptions {
   requestDelayMs?: number;
   fetchImpl?: typeof fetch;
   onResponse?: (response: ScanTransportRecord) => number | void;
+  beforeRequest?: () => void;
   appleBatchSize?: number;
   googlePlayClient?: ScraperClient & { list(options: any): Promise<any> };
   appStoreClient?: ScraperClient & { list(options: any): Promise<any> };
@@ -117,11 +144,12 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
   let previousITunesStart = 0;
   let cooldownUntil = 0;
   let chain: Promise<unknown> = Promise.resolve();
+  const operations = new AsyncLocalStorage<{ blocked?: unknown; failed?: unknown }>();
   const fetcher: typeof fetch = (input, init) => {
+    const operation = operations.getStore();
     const work = chain.then(async () => {
       const request = input instanceof Request ? input : undefined;
       const signal = init?.signal ?? request?.signal ?? undefined;
-      signal?.throwIfAborted();
       const url = new URL(request?.url ?? String(input));
       const iTunesApi =
         url.hostname === 'itunes.apple.com' && /^\/(search|lookup)$/.test(url.pathname);
@@ -131,8 +159,16 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         cooldownUntil - Date.now(),
         iTunesApi ? 3100 - (Date.now() - previousITunesStart) : 0,
       );
-      if (delay) await sleep(delay, undefined, { signal });
-      signal?.throwIfAborted();
+      try {
+        signal?.throwIfAborted();
+        if (delay) await sleep(delay, undefined, { signal });
+        signal?.throwIfAborted();
+        // Count each real attempt, including internal SDK requests, only after pacing.
+        options.beforeRequest?.();
+      } catch (error) {
+        if (operation) operation.blocked = error;
+        throw error;
+      }
       previousStart = Date.now();
       if (iTunesApi) previousITunesStart = previousStart;
       const record: ScanTransportRecord = {
@@ -149,6 +185,8 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         record.status = result.status;
         record.contentType = result.headers.get('content-type');
         record.body = await result.clone().text();
+        if (!result.ok && operation)
+          operation.failed = new Error(`Source HTTP ${result.status}: ${url.href}`);
         if (result.status === 429) {
           const retryAfter = result.headers.get('retry-after');
           const retryAt =
@@ -167,6 +205,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         });
         return result;
       } catch (error) {
+        if (operation) operation.failed = error;
         record.error = describeTransportError(error);
         options.onResponse?.(record);
         throw error;
@@ -178,7 +217,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
     );
     return work;
   };
-  const clients = {
+  const clients: Record<StoreName, ScraperClient & { list(options: any): Promise<any> }> = {
     'google-play': options.googlePlayClient ?? googlePlay,
     'app-store': options.appStoreClient ?? apple,
   };
@@ -187,6 +226,23 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
     store === 'google-play'
       ? { timeoutMs, retries: 0, signal, fetchImpl: fetcher }
       : { timeout: timeoutMs, retries: 0, signal, fetch: fetcher };
+  async function checked<T>(input: ProviderContext, operation: () => Promise<T>, strict = false) {
+    const state: { blocked?: unknown; failed?: unknown } = {};
+    return operations.run(state, async () => {
+      try {
+        input.signal?.throwIfAborted();
+        const result = await operation();
+        if (state.blocked !== undefined) throw state.blocked;
+        input.signal?.throwIfAborted();
+        if (strict && state.failed !== undefined) throw state.failed;
+        return result;
+      } catch (error) {
+        // Some SDK methods wrap errors, and Apple's similar() swallows them entirely.
+        // Budget/abort and real transport failures must survive those SDK boundaries.
+        throw state.blocked ?? state.failed ?? error;
+      }
+    });
+  }
   function adapter(store: StoreName): ScanProvider {
     const client = clients[store];
     const context = (input: ProviderContext) => ({
@@ -325,7 +381,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
         },
       };
     };
-    return {
+    const provider: ScanProvider = {
       releaseDetailCache(batchId) {
         for (const key of bulkCache.keys())
           if (JSON.parse(key)[0] === batchId) bulkCache.delete(key);
@@ -486,9 +542,175 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
               ? `https://play.google.com/store/search?${new URLSearchParams({ q: input.keyword, c: 'apps', gl: input.country, hl: input.language })}`
               : `https://itunes.apple.com/search?${new URLSearchParams({ term: input.keyword, country: input.country, media: 'software', entity: 'software', limit: String(input.page * 50), lang: 'en_us' })}`,
           ...(store === 'google-play'
-            ? { stopReason: warnings.length ? 'search-degraded' : 'search-interface-250-limit' }
+            ? {
+                stopReason: warnings.length
+                  ? 'search-degraded'
+                  : raw.length >= 250
+                    ? 'local-result-limit'
+                    : 'sdk-search-ended',
+              }
             : {}),
+          coverage: {
+            requestedLimit: store === 'google-play' ? 250 : input.page * 50,
+            returnedCount: raw.length,
+            tokenAvailability: 'not-exposed',
+            restartMode:
+              store === 'google-play' ? 'from-head-with-identity-deduplication' : 'single-window',
+            sourceKind: 'search',
+          },
         };
+      },
+      async extendedSearch(input) {
+        if (!Number.isInteger(input.limit) || input.limit < 1)
+          throw new Error('Extended search limit must be a positive integer');
+        const limit = store === 'google-play' ? Math.min(input.limit, 1000) : 200;
+        const source =
+          store === 'google-play'
+            ? `https://play.google.com/store/search?${new URLSearchParams({ q: input.keyword, c: 'apps', gl: input.country, hl: input.language })}`
+            : `https://itunes.apple.com/search?${new URLSearchParams({ term: input.keyword, country: input.country, media: 'software', entity: 'software', limit: '200', lang: 'en_us' })}`;
+        if (store === 'google-play' && !client.searchIterator)
+          return { data: [], raw: null, source, stopReason: 'unsupported' };
+        const raw: unknown[] = [];
+        const data: NormalizedApp[] = [];
+        const warnings: unknown[] = [];
+        let limited = false;
+        const recordItem = (row: unknown) => {
+          if (!row || typeof row !== 'object' || Array.isArray(row))
+            throw new Error('Extended search item is not an app object');
+          const normalized = normalizeApp(row as Record<string, unknown>, store);
+          raw.push(row);
+          data.push(normalized);
+          // Persistence occurs before requesting the next iterator item/page.
+          input.onItem?.(normalized, source);
+        };
+        if (store === 'google-play') {
+          for await (const row of client.searchIterator!({
+            ...context(input),
+            term: input.keyword,
+            onDegradation: (event: unknown) => warnings.push(event),
+            onIntegrityEvent: (event: unknown) => warnings.push(event),
+          })) {
+            input.signal?.throwIfAborted();
+            recordItem(row);
+            if (data.length >= limit) {
+              limited = true;
+              break;
+            }
+          }
+        } else {
+          const rows = await client.search({
+            ...context(input),
+            term: input.keyword,
+            num: 200,
+            page: 1,
+            fullDetail: false,
+          });
+          if (!Array.isArray(rows)) throw new Error('Extended search response is not an array');
+          for (const row of rows) {
+            input.signal?.throwIfAborted();
+            recordItem(row);
+          }
+        }
+        const result: ScanPage<NormalizedApp> = {
+          data,
+          raw,
+          source,
+          warnings,
+          requestLanguage: store === 'google-play' ? input.language : 'en_us',
+          stopReason: warnings.length
+            ? 'search-degraded'
+            : limited
+              ? 'local-result-limit'
+              : store === 'google-play'
+                ? 'sdk-iterator-ended'
+                : 'public-search-window-ended',
+          coverage: {
+            requestedLimit: limit,
+            returnedCount: data.length,
+            tokenAvailability: 'not-exposed',
+            restartMode:
+              store === 'google-play' ? 'from-head-with-identity-deduplication' : 'single-window',
+            sourceKind: 'search',
+          },
+        };
+        if (warnings.length)
+          throw new ScanSourceError('Search ended with SDK integrity/degradation warnings', result);
+        return result;
+      },
+      async related(input) {
+        const source =
+          store === 'google-play'
+            ? `https://play.google.com/store/apps/details?${new URLSearchParams({ id: input.externalId, gl: input.country, hl: 'en' })}`
+            : `https://apps.apple.com/${input.country}/app/id${encodeURIComponent(input.externalId)}`;
+        if (!client.similar) return { data: [], raw: null, source, stopReason: 'unsupported' };
+        const warnings: unknown[] = [];
+        let appleListingBody: string | undefined;
+        const relatedFetch: typeof fetch = async (url, init) => {
+          const response = await fetcher(url, init);
+          const requestUrl = url instanceof Request ? url.url : String(url);
+          if (store === 'app-store' && requestUrl === source && response.ok)
+            appleListingBody =
+              transportSources.get(response)?.record.body ?? (await response.clone().text());
+          return response;
+        };
+        const raw = await client.similar({
+          ...context(input),
+          ...(store === 'google-play'
+            ? { appId: input.externalId }
+            : { id: Number(input.externalId) }),
+          fullDetail: false,
+          onDegradation: (event: unknown) => warnings.push(event),
+          onIntegrityEvent: (event: unknown) => warnings.push(event),
+          requestOptions:
+            store === 'google-play'
+              ? { timeoutMs, retries: 0, signal: input.signal, fetchImpl: relatedFetch }
+              : { timeout: timeoutMs, retries: 0, signal: input.signal, fetch: relatedFetch },
+        });
+        if (!Array.isArray(raw)) throw new Error('Related apps response is not an array');
+        // Apple collects every app link on this page, not a verified recommendation shelf.
+        // An unrecognized HTTP200 page (challenge/error/layout change) is not an empty catalog.
+        if (
+          store === 'app-store' &&
+          raw.length === 0 &&
+          (!appleListingBody ||
+            !/(?:SoftwareApplication|software-application|product-header)/i.test(appleListingBody))
+        )
+          throw new ScanSourceError(
+            'Apple app-link source did not contain recognizable listing evidence',
+          );
+        const result: ScanPage<NormalizedApp> = {
+          data: raw.map((row) => normalizeApp(row, store)),
+          raw,
+          source,
+          warnings,
+          // GP reads the seed in English then clusters in the requested language; Apple
+          // reads a storefront page then en_us lookup. Exact languages remain in HTTP URLs.
+          requestLanguage: null,
+          stopReason: warnings.length
+            ? 'related-degraded'
+            : store === 'app-store'
+              ? raw.length
+                ? 'same-page-links'
+                : 'same-page-links-none-observed'
+              : raw.length >= 100
+                ? 'sdk-related-result-limit'
+                : raw.length
+                  ? 'sdk-related-ended'
+                  : 'similar-cluster-not-observed',
+          coverage: {
+            requestedLimit: store === 'google-play' ? 100 : null,
+            returnedCount: raw.length,
+            tokenAvailability: 'not-exposed',
+            restartMode: 'not-applicable',
+            sourceKind: store === 'google-play' ? 'similar-cluster' : 'same-page-links',
+          },
+        };
+        if (warnings.length)
+          throw new ScanSourceError(
+            'Related apps ended with SDK integrity/degradation warnings',
+            result,
+          );
+        return result;
       },
       async reviewsPage(input) {
         const appleSource = `https://itunes.apple.com/${input.country}/rss/customerreviews/page=${input.page}/id=${input.externalId}/sortby=${apple.sort.RECENT}/xml`;
@@ -574,6 +796,22 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           nextCursor: store === 'google-play' ? (raw.nextPaginationToken ?? null) : null,
         };
       },
+    };
+    return {
+      ...provider,
+      app: (input) => checked(input, () => provider.app(input)),
+      ...(provider.appWithPeers
+        ? {
+            appWithPeers: (input: Parameters<NonNullable<ScanProvider['appWithPeers']>>[0]) =>
+              checked(input, () => provider.appWithPeers!(input)),
+          }
+        : {}),
+      enrich: (input) => checked(input, () => provider.enrich(input)),
+      list: (input) => checked(input, () => provider.list(input), true),
+      search: (input) => checked(input, () => provider.search(input), true),
+      extendedSearch: (input) => checked(input, () => provider.extendedSearch!(input), true),
+      related: (input) => checked(input, () => provider.related!(input), true),
+      reviewsPage: (input) => checked(input, () => provider.reviewsPage(input)),
     };
   }
   return { 'google-play': adapter('google-play'), 'app-store': adapter('app-store') };

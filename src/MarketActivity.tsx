@@ -15,7 +15,8 @@ import {
   Radar,
   RefreshCw,
 } from 'lucide-react';
-import { api, query } from './api';
+import { query } from './api';
+import { useResource } from './use-resource';
 import type { Country } from './types';
 import type {
   MarketEventType as EventType,
@@ -117,32 +118,6 @@ function safeUrl(value: string | null | undefined) {
   } catch {
     return undefined;
   }
-}
-function useResource<T>(path: string, version: number) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const previousPath = useRef('');
-  useEffect(() => {
-    const controller = new AbortController();
-    if (previousPath.current !== path) setData(null);
-    previousPath.current = path;
-    setLoading(true);
-    setError('');
-    api<T>(path, { signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setData(result);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          setError(cause instanceof Error ? cause.message : '数据读取失败');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [path, version]);
-  return { data, error, loading };
 }
 function EventIcon({ event }: { event: ActivityEvent }) {
   const [failed, setFailed] = useState(false);
@@ -321,7 +296,7 @@ export function MarketActivity({
       setDay(today());
       setOffset(0);
     }
-  }, [version, followToday, day]);
+  }, [version, status.updatedAt, followToday, day]);
   useEffect(() => {
     if (data && !loading && offset > 0 && offset >= data.total)
       setOffset(Math.max(0, Math.floor((data.total - 1) / limit) * limit));

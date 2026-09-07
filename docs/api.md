@@ -109,3 +109,18 @@ JSON 字段使用 camelCase；时间为 ISO UTC。除 health、session 和 login
 手动通道接管时，批次开始前排队的评论/补充任务，仅在同身份、请求上下文和更晚的完整持久响应能证明覆盖时合并。`job.result.coalesced=true`，附 `batchId`、`coverage`、原 `sourceObservedAt` 和逐项 `proofs[{taskId,responseId,kind,sourceObservedAt}]`；这不表示刚刚请求商店。新手动成功响应保存在 `manual_responses`，评论任务结果含 `responseId/sourceObservedAt/upserted/skippedOlder/replayed`。旧缓存不能覆盖更新的评论，`upserted` 为实际写入数，重放收据不重复应用。
 
 新小时对象首次进入主库时，firstSeen追溯同国家/商店/外部ID全历史暂存来源的最早真实观测，包含早先insufficient阶段与旧批次发现；不能用首次strong或分析时间替代。已有主库firstSeen保持。首次发现事件的 `observedAt` 来自最早成功详情快照，尚无快照则null，与发现时间分开。
+
+## 六小时扩展发现与包名诊断（#22）
+
+以下 GET 沿用管理员会话鉴权，只读取已有账本，不隐式调度或请求商店。后台入口为 `#discovery`。
+
+| 方法和路径 | 查询 | 返回内容 |
+| --- | --- | --- |
+| GET `/api/discovery/status` | 无 | `enabled`、`intervalHours:6`、下一周期及心跳、当前/最近周期的状态计数、各市场实际来源/详情请求数、候选总计、配置限制和覆盖说明。 |
+| GET `/api/discovery/candidates` | `country,store,status,limit,offset` | `{candidates,total}`；状态可为 `pending,staged,admitted,failed`，含主库关联、首次/最近观测、来源数及分析判定。 |
+| GET `/api/discovery/identity` | 必填 `country,store,externalId`，可选 `limit,offset` | 同一市场身份的主库/候选状态、分类、任务和分页来源；合并扩展、小时及旧批次来源，来源键带通道前缀。 |
+| GET `/api/discovery/tasks/:id` | `limit,offset` | `{task,responses,responsesTotal,http,httpTotal}`；响应和完整HTTP各按同一分页参数读取，包含原文及真实错误。 |
+
+已知包名仍通过 `POST /api/apps` 的 `{country,store,externalId}` 加入跟踪并排详情任务，同时保存 `known-id` 来源。重复身份复用主库记录；响应或候选的 `admitted` 只表示主库成员存在，真实成功须核对 `lastFetchedAt`、成功响应和识别结果。未知包名诊断的 `not-discovered` 不代表商店不存在。
+
+来源限量、预算延期、失败及接口不支持，分别通过任务状态和停止原因记录，与自然结束分开。GP无公开恢复游标时从头去重；Apple搜索为200条请求窗口，实际返回数量可以更少。预算包括SDK内部续页/重试，部分来源失败仍保存已取得的行、完整响应及HTTP。历史目录使用原观测时间，新资料不改写既有人工分类或原2024批次成员。详细口径见[需求](requirements/EXTENDED-DISCOVERY.md)，本轮实际GP关联续页兼容问题另由[#24](https://github.com/zequnjiang/appeye/issues/24)追踪。

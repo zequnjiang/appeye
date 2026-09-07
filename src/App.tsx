@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   type ReactNode,
@@ -63,6 +64,13 @@ import '@fontsource-variable/dm-sans';
 import '@fontsource-variable/manrope';
 import './styles.css';
 import { MarketActivity } from './MarketActivity';
+import { DiscoveryDiagnostics } from './DiscoveryDiagnostics';
+import { useResource as useData, sessionQueries } from './use-resource';
+import {
+  captureLibraryReading,
+  restoreLibraryReading,
+  type LibraryReading,
+} from './library-reading';
 
 const countryFlags: Record<string, string> = {
   th: '🇹🇭',
@@ -146,26 +154,6 @@ const safeUrl = (url: string | null | undefined) => {
     return undefined;
   }
 };
-function useData<T>(path: string, version = 0) {
-  const [data, setData] = useState<T | null>(null),
-    [error, setError] = useState(''),
-    [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError('');
-    api<T>(path, { signal: controller.signal })
-      .then(setData)
-      .catch((e) => {
-        if (e.name !== 'AbortError') setError(e.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [path, version]);
-  return { data, error, loading };
-}
 function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
@@ -409,7 +397,7 @@ function Dashboard({
 }) {
   const { data, error, loading } = useData<Overview>('/overview', version);
   if (loading && !data) return <Loading />;
-  if (error) return <ErrorBox message={error} />;
+  if (error && !data) return <ErrorBox message={error} />;
   if (!data) return null;
   const stats = [
     {
@@ -675,7 +663,12 @@ function Filters({
         <ListFilter size={16} />
         筛选
       </div>
-      <select aria-label="筛选国家" value={country} onChange={(e) => setCountry(e.target.value)}>
+      <select
+        data-focus-key="library-country"
+        aria-label="筛选国家"
+        value={country}
+        onChange={(e) => setCountry(e.target.value)}
+      >
         <option value="">全部国家</option>
         {countries.map((c) => (
           <option value={c.code} key={c.code}>
@@ -683,7 +676,12 @@ function Filters({
           </option>
         ))}
       </select>
-      <select aria-label="筛选商店" value={store} onChange={(e) => setStore(e.target.value)}>
+      <select
+        data-focus-key="library-store"
+        aria-label="筛选商店"
+        value={store}
+        onChange={(e) => setStore(e.target.value)}
+      >
         <option value="">全部商店</option>
         <option value="google-play">Google Play</option>
         <option value="app-store">App Store</option>
@@ -692,33 +690,86 @@ function Filters({
     </div>
   );
 }
+export interface AppsViewState {
+  country: string;
+  store: string;
+  classification: string;
+  loanVerdict: string;
+  q: string;
+  search: string;
+  offset: number;
+}
+const defaultAppsView: AppsViewState = {
+  country: '',
+  store: '',
+  classification: '',
+  loanVerdict: '',
+  q: '',
+  search: '',
+  offset: 0,
+};
 function AppsPage({
   version,
   countries,
   onSelect,
   onAdd,
+  view,
+  onViewChange,
+  reading,
 }: {
   version: number;
   countries: Country[];
   onSelect: (id: number) => void;
   onAdd: () => void;
+  view: AppsViewState;
+  onViewChange: (view: AppsViewState) => void;
+  reading: React.RefObject<LibraryReading | null>;
 }) {
-  const [country, setCountry] = useState(''),
-    [store, setStore] = useState(''),
-    [classification, setClassification] = useState(''),
-    [loanVerdict, setLoanVerdict] = useState(''),
-    [q, setQ] = useState(''),
-    [search, setSearch] = useState(''),
-    [offset, setOffset] = useState(0);
+  const { country, store, classification, loanVerdict, q, search, offset } = view;
+  const path =
+    '/apps' + query({ country, store, classification, loanVerdict, q: search, limit: 20, offset });
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const change = (updates: Partial<AppsViewState>, reset = true) => {
+    reading.current = null;
+    onViewChange({ ...viewRef.current, ...updates, ...(reset ? { offset: 0 } : {}) });
+  };
+  const setCountry = (country: string) => change({ country }),
+    setStore = (store: string) => change({ store });
+  const setClassification = (classification: string) => change({ classification }),
+    setLoanVerdict = (loanVerdict: string) => change({ loanVerdict });
+  const setQ = (q: string) => onViewChange({ ...viewRef.current, q });
+  const setOffset = (offset: number) => change({ offset }, false);
   useEffect(() => {
-    const t = setTimeout(() => setSearch(q), 250);
-    return () => clearTimeout(t);
-  }, [q]);
-  useEffect(() => setOffset(0), [country, store, classification, loanVerdict, search]);
-  const { data, error, loading } = useData<{ apps: MarketApp[]; total: number }>(
-    '/apps' + query({ country, store, classification, loanVerdict, q: search, limit: 20, offset }),
-    version,
-  );
+    if (q === search) return;
+    const timer = setTimeout(() => change({ search: q }), 250);
+    return () => clearTimeout(timer);
+  }, [q, search]);
+  const { data, error, loading } = useData<{ apps: MarketApp[]; total: number }>(path, version);
+  useLayoutEffect(() => {
+    if (!data) return;
+    if (offset > 0 && offset >= data.total) {
+      const next = Math.max(0, Math.floor((data.total - 1) / 20) * 20);
+      reading.current = null;
+      onViewChange({ ...viewRef.current, offset: next });
+      return;
+    }
+    if (reading.current?.queryKey === path) restoreLibraryReading(reading.current);
+    reading.current = captureLibraryReading(path);
+  }, [data, path, offset, error]);
+  useEffect(() => {
+    const capture = () => {
+      if (data) reading.current = captureLibraryReading(path);
+    };
+    window.addEventListener('scroll', capture, { passive: true });
+    window.addEventListener('resize', capture);
+    document.addEventListener('focusin', capture);
+    return () => {
+      window.removeEventListener('scroll', capture);
+      window.removeEventListener('resize', capture);
+      document.removeEventListener('focusin', capture);
+    };
+  }, [data, path]);
   return (
     <>
       <div className="section-heading">
@@ -752,6 +803,7 @@ function AppsPage({
             <Search size={18} />
             <input
               aria-label="搜索应用"
+              data-focus-key="library-search"
               placeholder="搜索应用名称、开发者或应用 ID"
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -767,6 +819,7 @@ function AppsPage({
         <Filters {...{ countries, country, setCountry, store, setStore }}>
           <select
             aria-label="筛选信贷分类"
+            data-focus-key="library-classification"
             value={classification}
             onChange={(e) => setClassification(e.target.value)}
           >
@@ -779,6 +832,7 @@ function AppsPage({
           </select>
           <select
             aria-label="筛选识别证据"
+            data-focus-key="library-verdict"
             value={loanVerdict}
             onChange={(e) => setLoanVerdict(e.target.value)}
           >
@@ -790,13 +844,14 @@ function AppsPage({
             ))}
           </select>
         </Filters>
-        {error ? (
+        {error && data && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
+        {error && !data ? (
           <ErrorBox message={error} />
-        ) : loading ? (
+        ) : loading && !data ? (
           <Loading />
         ) : data?.apps.length ? (
           <>
-            <div className="table-wrap">
+            <div className="table-wrap" data-library-table>
               <table>
                 <thead>
                   <tr>
@@ -813,9 +868,13 @@ function AppsPage({
                 </thead>
                 <tbody>
                   {data.apps.map((app) => (
-                    <tr key={app.id}>
+                    <tr key={app.id} data-library-row={app.id}>
                       <td>
-                        <button className="app-cell" onClick={() => onSelect(app.id)}>
+                        <button
+                          className="app-cell"
+                          data-focus-key={`app-${app.id}`}
+                          onClick={() => onSelect(app.id)}
+                        >
                           <AppIcon app={app} />
                           <div>
                             <strong>{app.title || app.externalId}</strong>
@@ -992,9 +1051,16 @@ function AppDetail({
   const [tab, setTab] = useState('overview'),
     [metric, setMetric] = useState<'score' | 'minInstalls' | 'ratings'>('score'),
     [busy, setBusy] = useState(false);
-  if (loading && !data) return <Loading />;
-  if (error) return <ErrorBox message={error} />;
-  if (!data) return null;
+  if (!data)
+    return (
+      <>
+        <button className="back-link" onClick={onBack}>
+          <ArrowLeft size={15} />
+          返回应用库
+        </button>
+        {error ? <ErrorBox message={error} /> : <Loading />}
+      </>
+    );
   const app = data.app;
   async function classify(value: string) {
     setBusy(true);
@@ -1010,6 +1076,7 @@ function AppDetail({
   }
   return (
     <>
+      {error && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
       <button className="back-link" onClick={onBack}>
         <ArrowLeft size={15} />
         返回应用库
@@ -1234,9 +1301,10 @@ function DetailChanges({ id, version }: { id: number; version: number }) {
           <p>每条变化对应前后两次观测结果</p>
         </div>
       </div>
-      {error ? (
+      {error && data && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
+      {error && !data ? (
         <ErrorBox message={error} />
-      ) : loading ? (
+      ) : loading && !data ? (
         <Loading />
       ) : data?.changes.length ? (
         <>
@@ -1304,9 +1372,10 @@ function Reviews({
           采集评价
         </button>
       </div>
-      {error ? (
+      {error && data && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
+      {error && !data ? (
         <ErrorBox message={error} />
-      ) : loading ? (
+      ) : loading && !data ? (
         <Loading />
       ) : data?.reviews.length ? (
         <>
@@ -1427,7 +1496,8 @@ function JobsPage({
           </select>
           <span className="muted small">每 15 秒刷新状态</span>
         </div>
-        {error ? (
+        {error && data && <ErrorBox message={`${error}；保留上次读取结果，将自动重试。`} />}
+        {error && !data ? (
           <ErrorBox message={error} />
         ) : loading && !data ? (
           <Loading />
@@ -1894,23 +1964,25 @@ function AddAppForm({
 
 function Workspace({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [page, setPage] = useState(() =>
-      window.location.hash === '#market-activity' ? 'changes' : 'overview',
+      window.location.hash === '#market-activity'
+        ? 'changes'
+        : window.location.hash === '#discovery'
+          ? 'discovery'
+          : 'overview',
     ),
     [appId, setAppId] = useState<number | null>(null),
     [version, setVersion] = useState(0),
     [modal, setModal] = useState<'discover' | 'add' | 'country' | null>(null),
     [editCountry, setEditCountry] = useState<Country | null>(null),
-    [toast, setToast] = useState('');
+    [toast, setToast] = useState(''),
+    [appsView, setAppsView] = useState<AppsViewState>(defaultAppsView);
+  const libraryReading = useRef<LibraryReading | null>(null);
   const { data: countryData, error: countryError } = useData<{ countries: Country[] }>(
     '/countries',
     version,
   );
   const countries = countryData?.countries || [];
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
-  useEffect(() => {
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
-  }, [refresh]);
   useEffect(() => {
     if (toast) {
       const t = setTimeout(() => setToast(''), 6000);
@@ -1921,6 +1993,7 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     { id: 'overview', label: '市场概览', icon: LayoutDashboard },
     { id: 'apps', label: '应用库', icon: Layers3 },
     { id: 'changes', label: '市场动态', icon: Activity },
+    { id: 'discovery', label: '发现诊断', icon: Search },
     { id: 'jobs', label: '采集任务', icon: RefreshCw },
     { id: 'settings', label: '市场设置', icon: Settings2 },
   ];
@@ -1930,11 +2003,33 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     window.history.replaceState(
       null,
       '',
-      p === 'changes' ? '#market-activity' : window.location.pathname + window.location.search,
+      p === 'changes'
+        ? '#market-activity'
+        : p === 'discovery'
+          ? '#discovery'
+          : window.location.pathname + window.location.search,
     );
     window.scrollTo(0, 0);
   }
   function select(id: number) {
+    if (page === 'apps' && appId === null) {
+      const key =
+        '/apps' +
+        query({
+          country: appsView.country,
+          store: appsView.store,
+          classification: appsView.classification,
+          loanVerdict: appsView.loanVerdict,
+          q: appsView.search,
+          limit: 20,
+          offset: appsView.offset,
+        });
+      libraryReading.current = captureLibraryReading(key, true);
+      libraryReading.current.focusKey ??= `app-${id}`;
+    } else {
+      libraryReading.current = null;
+      setAppsView(defaultAppsView);
+    }
     setPage('apps');
     setAppId(id);
     window.scrollTo(0, 0);
@@ -2053,7 +2148,10 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
               key={appId}
               id={appId}
               version={version}
-              onBack={() => setAppId(null)}
+              onBack={() => {
+                if (libraryReading.current) libraryReading.current.restoreFocus = true;
+                setAppId(null);
+              }}
               onRefresh={(id, t) => void collect(id, t)}
               onNotify={setToast}
               onChanged={refresh}
@@ -2068,6 +2166,9 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
             />
           ) : page === 'apps' ? (
             <AppsPage
+              view={appsView}
+              onViewChange={setAppsView}
+              reading={libraryReading}
               version={version}
               countries={countries}
               onSelect={select}
@@ -2079,6 +2180,13 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
               countries={countries}
               onSelect={select}
               onJobs={() => navigate('jobs')}
+            />
+          ) : page === 'discovery' ? (
+            <DiscoveryDiagnostics
+              countries={countries}
+              version={version}
+              onSelect={select}
+              onChanged={refresh}
             />
           ) : page === 'jobs' ? (
             <JobsPage
@@ -2150,6 +2258,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null),
     [error, setError] = useState('');
   const load = useCallback(() => {
+    sessionQueries.clear();
     setError('');
     api<Session>('/auth/session')
       .then(setSession)
@@ -2157,7 +2266,10 @@ export default function App() {
   }, []);
   useEffect(load, [load]);
   useEffect(() => {
-    const h = () => setSession((s) => (s ? { ...s, authenticated: false } : s));
+    const h = () => {
+      sessionQueries.clear();
+      setSession((s) => (s ? { ...s, authenticated: false } : s));
+    };
     window.addEventListener('appeye:unauthorized', h);
     return () => window.removeEventListener('appeye:unauthorized', h);
   }, []);

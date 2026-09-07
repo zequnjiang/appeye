@@ -4,6 +4,10 @@
 
 初始市场：泰国（TH）、墨西哥（MX）、菲律宾（PH）、巴基斯坦（PK）、印度尼西亚（ID）、阿根廷（AR）。国家、语言、关键词及启停可在后台增改；启用国家统一每 60 分钟安排发现和详情刷新。
 
+应用库每15秒静默更新已保存数据，详情返回保留查询、分页及阅读位置。后台另外每6小时执行扩展发现：本地贷款词表、同市场开发者目录及关联应用；每市场默认60次来源HTTP和60次候选详情HTTP，未完成工作持久延期。小时刷新与扩展发现均指调度周期，不保证全部应用在周期内采集完毕。
+
+「发现诊断」可按国家、商店、包名/数字ID查询未发现、待处理、暂存、失败及已入库状态，查看原始来源和预算停止原因。已知包名可通过「添加应用」直接跟踪，绕过搜索排名；创建记录不等于详情采集成功。公共接口的有限结果不代表全市场，历史目录回收也不等于今日新上架。配置见 `.env.example` 中 `EXTENDED_DISCOVERY_ENABLED` 与 `DISCOVERY_*`。
+
 ## 快速启动
 
 要求 **Node.js 24+** 与 npm；不需要 Docker 或额外数据库服务。
@@ -17,7 +21,7 @@ npm run dev
 
 打开 [本机后台](http://127.0.0.1:5173)，用 `.env` 中的管理员密码登录。开发 API 地址为 `http://127.0.0.1:3000`；Vite 会代理 `/api`，页面与 API 共享认证。密码和真实数据库不会提交到 Git。
 
-正式数据初始为空。默认 `AUTO_SCHEDULE=true`，启动并设置密码后，产品内协调器立即安排一次发现和详情刷新，后续每 60 分钟安排。希望先查看配置再采集时，将 `.env` 的 `AUTO_SCHEDULE` 设为 `false`；这暂停小时任务，手动任务和已经冻结的全量批次仍可执行。暂停国家会跳过尚未开始的自动小时任务，已进行的单次请求可以完成。
+正式数据初始为空。默认 `AUTO_SCHEDULE=true`，启动并设置密码后，产品内协调器立即安排一次发现和详情刷新，后续每 60 分钟安排。`AUTO_SCHEDULE` 是自动调度总开关，设为 `false` 同时暂停小时与六小时扩展任务；手动任务和已经冻结的全量批次仍可执行。总开关启用时，`EXTENDED_DISCOVERY_ENABLED=false` 可单独关闭扩展发现并保留小时监测。暂停国家会跳过尚未开始的自动小时任务，已进行的单次请求可以完成。
 
 ## 演示后台
 
@@ -127,3 +131,5 @@ CEO 负责调度和最终交付；PM 编写需求与验收标准；CTO 实现并
 V0.2 需求与验收：[需求 #7](https://github.com/zequnjiang/appeye/issues/7)、[依赖迁移 #5](https://github.com/zequnjiang/appeye/issues/5)、[完整信息 #8](https://github.com/zequnjiang/appeye/issues/8)、[信贷识别 #9](https://github.com/zequnjiang/appeye/issues/9)。范围及验收标准见 [V0.2 需求](docs/requirements/V0.2.md)。
 
 每小时监测的本机常驻部署、launchd示例与停止/恢复步骤见[本机服务操作](docs/operations/LOCAL-SERVICE.md)。模板本身不代表已安装服务；实际运行状态以部署报告和产品监测状态为准。
+
+静默刷新与扩展发现分别通过[#21](https://github.com/zequnjiang/appeye/issues/21)和[#22](https://github.com/zequnjiang/appeye/issues/22)跟踪。[正式部署证据](docs/reports/SILENT-DISCOVERY-DEPLOYMENT.md)、[前端PM验收](docs/reports/SILENT-REFRESH-PM.md)和[扩展发现PM验收](docs/reports/EXTENDED-DISCOVERY-PM.md)记录独立测试、目标真实补录及已知来源限制。

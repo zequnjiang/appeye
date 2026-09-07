@@ -135,7 +135,7 @@ test('FS-AC-01/08: Finance sources retain country, collection, full raw rows and
     keyword: 'สินเชื่อ',
     page: 1,
   });
-  assert.equal(gpSearch.stopReason, 'search-interface-250-limit');
+  assert.equal(gpSearch.stopReason, 'sdk-search-ended');
   const appleSearch = await providers['app-store'].search({
     country: 'mx',
     language: 'es',

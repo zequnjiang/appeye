@@ -76,6 +76,7 @@ export function ensureFullScanSchema(store: Store) {
       result TEXT, error TEXT, stop_reason TEXT, UNIQUE(batch_id,task_key)
     );
     CREATE INDEX IF NOT EXISTS full_scan_task_queue ON full_scan_tasks(batch_id,status,next_run_at,phase,page,id);
+    CREATE INDEX IF NOT EXISTS full_scan_task_identity ON full_scan_tasks(country,store,external_id,id);
     CREATE TABLE IF NOT EXISTS full_scan_attempts (
       id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES full_scan_tasks(id), attempt INTEGER NOT NULL,
       started_at TEXT NOT NULL, finished_at TEXT, status TEXT NOT NULL, error TEXT

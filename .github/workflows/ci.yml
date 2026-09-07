@@ -20,6 +20,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run check
       - name: Audit production dependencies (high and critical)
         run: npm audit --omit=dev --audit-level=high

@@ -51,6 +51,13 @@ const coordinator =
         store,
         enabled: process.env.AUTO_SCHEDULE !== 'false',
         providerOptions: { timeoutMs, requestDelayMs, appleBatchSize: 50 },
+        discoveryOptions: {
+          enabled: process.env.EXTENDED_DISCOVERY_ENABLED !== 'false',
+          sourceRequests: configuredNumber('DISCOVERY_SOURCE_REQUESTS', 60, 1, 1000, true),
+          detailRequests: configuredNumber('DISCOVERY_DETAIL_REQUESTS', 60, 1, 1000, true),
+          timeoutMs: configuredNumber('DISCOVERY_STEP_TIMEOUT_MS', 20000, 100, 60000, true),
+          searchResults: configuredNumber('DISCOVERY_SEARCH_RESULTS', 1000, 1, 1000, true),
+        },
         intervalMs: configuredNumber('WORKER_INTERVAL_MS', 1000, 50, 60000),
         batchId: process.env.FULL_SCAN_BATCH_ID || undefined,
         onBatchProgress(summary) {

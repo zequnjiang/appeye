@@ -85,7 +85,7 @@ export function createHourlyRunner(options: HourlyOptions) {
             page: 1,
             requestLanguage,
             coverage:
-              name === 'app-store' ? 'hourly-search-first-50' : 'search-interface-250-limit',
+              name === 'app-store' ? 'hourly-search-first-50' : 'bounded-sdk-search-request-250',
           });
         for (const app of store.all(
           'SELECT id,external_id FROM apps WHERE country=? AND store=?',
@@ -319,7 +319,8 @@ export function createHourlyRunner(options: HourlyOptions) {
         }
         receipt({
           fetched: page.data.length,
-          coverage: payload.coverage ?? page.stopReason ?? 'bounded-public-chart',
+          coverage: page.stopReason ?? payload.coverage ?? 'bounded-public-chart',
+          requestedWindow: payload.coverage ?? null,
           warnings: page.warnings ?? [],
         });
         store.run(
