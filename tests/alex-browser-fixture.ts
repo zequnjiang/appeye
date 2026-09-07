@@ -23,12 +23,13 @@ export async function alexBrowserHarness() {
     const base = server.resolvedUrls!.local[0];
     browser = await chromium.launch({ channel: process.env.CI ? undefined : 'chrome', headless: true });
     return {
-      async fixture(width = 1280) {
-        const context: BrowserContext = await browser!.newContext({ viewport: { width, height: 900 } });
+      async fixture(width = 1280, options: { height?: number; clock?: boolean } = {}) {
+        const context: BrowserContext = await browser!.newContext({ viewport: { width, height: options.height ?? 900 } });
         const page = await context.newPage();
+        if (options.clock) await page.clock.install();
         const state = {
           rows: Array.from({ length: 120 }, (_, i) => alexApp(i + 1)), calls: [] as string[],
-          failed: false, gate: null as Promise<void> | null, pageErrors: [] as string[], documents: 0,
+          failed: false, gate: null as Promise<void> | null, pageErrors: [] as string[], documents: 0, completed: 0,
         };
         page.on('pageerror', error => state.pageErrors.push(error.message));
         page.on('request', request => { if (request.isNavigationRequest()) state.documents++; });
@@ -42,12 +43,13 @@ export async function alexBrowserHarness() {
             state.calls.push(url.search);
             const rows = state.rows.filter(row => (!url.searchParams.get('country') || row.country === url.searchParams.get('country')) && (!url.searchParams.get('store') || row.store === url.searchParams.get('store')) && (!url.searchParams.get('classification') || row.classification === url.searchParams.get('classification')) && (!url.searchParams.get('q') || row.title.toLowerCase().includes(url.searchParams.get('q')!.toLowerCase())));
             const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 20);
-            body = { apps: rows.slice(offset, offset + limit), total: rows.length };
+            body = JSON.parse(JSON.stringify({ apps: rows.slice(offset, offset + limit), total: rows.length }));
             const gate = state.gate; if (gate) await gate;
-            if (state.failed) { await route.fulfill({ status: 503, json: { error: 'Alex synthetic refresh failure' } }).catch(() => {}); return; }
+            if (state.failed) { await route.fulfill({ status: 503, json: { error: 'Alex synthetic refresh failure' } }).catch(() => {}); state.completed++; return; }
           } else if (/^\/api\/apps\/\d+$/.test(url.pathname)) body = { app: alexApp(Number(url.pathname.split('/').at(-1))), snapshots: [], changes: [], reviews: [], enrichments: [], rawDetail: { original: { preserved: true } } };
           else body = { changes: [], reviews: [], discoveries: [], history: [], total: 0 };
           await route.fulfill({ json: body }).catch(() => {});
+          if (url.pathname === '/api/apps') state.completed++;
         });
         await page.goto(base);
         await page.getByRole('navigation').getByRole('button', { name: '应用库', exact: true }).click();
