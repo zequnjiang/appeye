@@ -1,6 +1,6 @@
 # 六国双商店每六小时扩展发现与漏收诊断
 
-- 状态：**PM Ready，可实施；尚未测试或最终验收。**
+- 状态：**ED-AC-01–08按有界公开发现及失败可见范围通过PM最终验收。** AR目标已真实补录为strong/auto confirmed，正式部署/重启和原数据保护通过；允许CEO完成报告/最新CI后合并PR#23并关闭#22。5项GP关联续页兼容问题[#24](https://github.com/zequnjiang/appeye/issues/24)和原#11保持OPEN，不计完整采集成功。见[PM最终报告](../reports/EXTENDED-DISCOVERY-PM.md)。
 - 需求版本：1，2026-09-07（Asia/Shanghai）。
 - GitHub：[需求 #22](https://github.com/zequnjiang/appeye/issues/22)；分支 `codex/silent-refresh-discovery`。
 - 关联：[每小时监测](HOURLY-MARKET-ACTIVITY.md)、[V0.2](V0.2.md)、[原全量运营 #11](https://github.com/zequnjiang/appeye/issues/11)、[工作流](../workflow.md)。同期 [静默刷新 #21](https://github.com/zequnjiang/appeye/issues/21) 分别验收。

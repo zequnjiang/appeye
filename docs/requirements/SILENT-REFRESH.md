@@ -1,6 +1,6 @@
 # 应用库静默刷新与详情返回状态保留
 
-- 状态：**PM Ready，可实施；尚未测试或最终验收。**
+- 状态：**SR-AC-01–06全部通过PM最终验收。** 221项独立回归、桌面/窄屏、正式部署产物对应和运行检查通过；允许CEO完成报告/最新CI后合并PR#23并关闭#21。见[PM最终报告](../reports/SILENT-REFRESH-PM.md)。
 - 需求版本：1，2026-09-07（Asia/Shanghai）。
 - GitHub：[缺陷 #21](https://github.com/zequnjiang/appeye/issues/21)；分支 `codex/silent-refresh-discovery`。
 - 关联：[MVP](MVP.md)、[V0.2](V0.2.md)、[工作流](../workflow.md)。同期 [扩展发现 #22](https://github.com/zequnjiang/appeye/issues/22) 保留独立范围。

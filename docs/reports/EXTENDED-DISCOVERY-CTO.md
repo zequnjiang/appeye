@@ -2,7 +2,7 @@
 
 - Issue：[需求 #22](https://github.com/zequnjiang/appeye/issues/22)。需求：[ED-AC-01–08](../requirements/EXTENDED-DISCOVERY.md)。
 - 分支：`codex/silent-refresh-discovery`。角色：CEO兼后端开发；采集适配器由独立CTO子Agent开发、自检，Alex独立验证，PM最后验收。
-- 状态：开发自检通过，交接Alex；生产采集与最终验收尚未完成，不能以夹具结果代替真实入库。
+- 状态：开发自检通过，已交接Alex；正式部署和目标真实采集补录完成，独立测试与最终PM结论分别见对应报告。
 
 ## 实现
 
@@ -20,6 +20,10 @@
 - 初次测试2项因测试调用错误的Store方法失败，改为真实`updateClassification`后全通过；没有改生产行为来绕过失败。
 - Provider专项测试及原采集器回归由CTO适配器子Agent另行报告。
 
-## 待交付关卡
+## 后续交付证据
 
-Alex独立回归、完整构建/CI、受控生产切换、目标`com.creditouno.loan`真实入库和两商店运行证据、PM验收、GitHub提交合并与关闭尚待完成。
+业务提交`e356bb323309dbb4e332b3bf941b314c9de6987f`的[CI 34138027098](https://github.com/zequnjiang/appeye/actions/runs/34138027098)通过，隔离生产构建完成。Alex独立完整回归221项全部通过，类型检查通过，详见[独立测试报告](EXTENDED-DISCOVERY-ALEX.md)。
+
+正式备份、迁移前后旧数据核对、实际六国双店请求、`com.creditouno.loan`两次真实成功观测及身份去重、受控重启恢复均已完成，详见[正式部署证据](SILENT-DISCOVERY-DEPLOYMENT.md)。GP关联续页的实际部分失败由[#24](https://github.com/zequnjiang/appeye/issues/24)独立跟踪，没有伪装为完整成功。原2024批次保持不变，#11继续独立追踪。
+
+本自检报告不代替[PM独立验收](EXTENDED-DISCOVERY-PM.md)；合并和关闭议题须以该最终结论为准。
