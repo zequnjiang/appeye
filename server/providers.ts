@@ -23,6 +23,8 @@ export interface ScraperClient {
   inAppPurchases?(options: any): Promise<any>;
   ratings?(options: any): Promise<any>;
   developer?(options: any): Promise<any>;
+  searchIterator?(options: any): AsyncIterable<any>;
+  similar?(options: any): Promise<any>;
 }
 export interface ProviderOptions {
   timeoutMs?: number;

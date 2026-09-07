@@ -10,6 +10,13 @@ import { enrichmentKinds, type Providers, type StoreName } from './types.js';
 import type { Worker } from './worker.js';
 import { activityWindow, getMarketActivity, type CollectionStatus } from './market-activity.js';
 import { getCollectionStatus } from './hourly-monitor.js';
+import {
+  discoveryIdentity,
+  getDiscoveryStatus,
+  listDiscoveryCandidates,
+  recordKnownIdentity,
+} from './extended-discovery.js';
+import { earliestKnownDiscovery } from './manual-collection.js';
 
 export const limitations = [
   '首次发现是本系统第一次观察到该应用的时间，不代表实际新上架；商店提供的发布日期单独保存。',
@@ -59,7 +66,10 @@ export interface AppOptions {
   sessionSecret?: string;
   providers?: Providers;
   worker?: Worker;
-  collection?: { status(): CollectionStatus };
+  collection?: {
+    status(): CollectionStatus;
+    discovery?: { status(): ReturnType<typeof getDiscoveryStatus> };
+  };
   demoMode?: boolean;
   allowedOrigins?: string[];
   clientPath?: string;
@@ -266,6 +276,58 @@ export function createApp(options: AppOptions) {
     });
   });
   app.get('/api/apps', (req, res) => res.json(store.listApps(filterSchema.parse(req.query))));
+  app.get('/api/discovery/status', (_req, res) =>
+    res.json(options.collection?.discovery?.status() ?? getDiscoveryStatus(store)),
+  );
+  app.get('/api/discovery/candidates', (req, res) => {
+    const filters = pageSchema
+      .extend({
+        country: z
+          .string()
+          .regex(/^[a-z]{2}$/)
+          .optional(),
+        store: storeName.optional(),
+        status: z.enum(['pending', 'staged', 'admitted', 'failed']).optional(),
+      })
+      .parse(req.query);
+    res.json(listDiscoveryCandidates(store, filters));
+  });
+  app.get('/api/discovery/identity', (req, res) => {
+    const identity = pageSchema
+      .extend({
+        country: z.string().regex(/^[a-z]{2}$/),
+        store: storeName,
+        externalId: z.string().trim().min(1).max(200),
+      })
+      .parse(req.query);
+    res.json(discoveryIdentity(store, identity));
+  });
+  app.get('/api/discovery/tasks/:id', (req, res) => {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const task = store.one('SELECT * FROM discovery_tasks WHERE id=?', id);
+    if (!task) throw new HttpError(404, '发现任务不存在');
+    const { limit, offset } = pageSchema.parse(req.query);
+    res.json({
+      task,
+      responses: store
+        .all(
+          'SELECT * FROM discovery_responses WHERE task_id=? ORDER BY id DESC LIMIT ? OFFSET ?',
+          id,
+          limit,
+          offset,
+        )
+        .map((r) => ({ ...r, data: JSON.parse(r.data) })),
+      responsesTotal: store.one('SELECT COUNT(*) n FROM discovery_responses WHERE task_id=?', id)!
+        .n,
+      http: store.all(
+        'SELECT * FROM discovery_http WHERE task_id=? ORDER BY id DESC LIMIT ? OFFSET ?',
+        id,
+        limit,
+        offset,
+      ),
+      httpTotal: store.one('SELECT COUNT(*) n FROM discovery_http WHERE task_id=?', id)!.n,
+    });
+  });
   const liveOnly = () => {
     if (options.demoMode)
       throw new HttpError(409, '演示模式使用隔离样例数据，不能启动真实采集；请切换正式数据库');
@@ -293,13 +355,25 @@ export function createApp(options: AppOptions) {
       !/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/.test(data.externalId)
     )
       throw new HttpError(400, 'Google Play 请填写合法包名，如 com.example.loan');
-    const record = store.createApp(data);
+    const existing = store.one(
+      'SELECT id FROM apps WHERE country=? AND store=? AND external_id=?',
+      data.country,
+      data.store,
+      data.externalId,
+    );
+    const record = store.createApp({
+      ...data,
+      observedAt: existing
+        ? new Date().toISOString()
+        : earliestKnownDiscovery(store, data, new Date().toISOString()),
+    });
     const job = store.enqueueJob({
       type: 'refresh',
       country: record.country,
       store: record.store,
       appId: record.id,
     });
+    recordKnownIdentity(store, record, job.id, new Date().toISOString());
     res.status(201).json({ app: record, job });
   });
   const appId = (req: Request) => {

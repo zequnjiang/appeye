@@ -11,6 +11,7 @@ import { createWorker } from './worker.js';
 import type { Providers } from './types.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { coalesceCoveredJobs, createManualJournal } from './manual-collection.js';
+import { createDiscoveryRunner, type DiscoveryOptions } from './extended-discovery.js';
 
 export interface CollectionLane {
   runOnce(): Promise<boolean>;
@@ -22,11 +23,26 @@ export function createFairDispatcher(lanes: {
   hourly: CollectionLane;
   batch?: CollectionLane;
   manual?: CollectionLane;
+  discovery?: CollectionLane;
 }) {
   let position = 0,
     busy = false,
     stopped = false;
-  const order = ['hourly', 'hourly', 'hourly', 'batch', 'manual'] as const;
+  const order: Array<keyof typeof lanes> = lanes.discovery
+    ? [
+        'hourly',
+        'hourly',
+        'hourly',
+        'batch',
+        'manual',
+        'hourly',
+        'hourly',
+        'hourly',
+        'batch',
+        'manual',
+        'discovery',
+      ]
+    : ['hourly', 'hourly', 'hourly', 'batch', 'manual'];
   return {
     async runOnce() {
       if (busy || stopped) return false;
@@ -61,6 +77,7 @@ export interface CoordinatorOptions {
   now?: () => Date;
   enabled?: boolean;
   hourlyOptions?: Pick<HourlyOptions, 'maxAttempts' | 'retryDelayMs' | 'timeoutMs'>;
+  discoveryOptions?: Omit<DiscoveryOptions, 'store' | 'providers' | 'now'>;
   batchId?: string;
   intervalMs?: number;
   onBatchProgress?: (
@@ -72,11 +89,13 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
   const { store } = options;
   if (store.one("SELECT value FROM metadata WHERE key='dataset'")?.value === 'demo')
     throw new Error('Demo database cannot run a live coordinator');
-  type Owner = 'hourly' | 'batch' | 'manual';
+  type Owner = 'hourly' | 'batch' | 'manual' | 'discovery';
   const requestOwner = new AsyncLocalStorage<Owner>();
   const requestRecorder = new AsyncLocalStorage<(record: ScanTransportRecord) => number>();
+  const requestBudget = new AsyncLocalStorage<() => void>();
   const manualJournal = createManualJournal({ store, now: options.now });
   let hourly: ReturnType<typeof createHourlyRunner>;
+  let discovery: ReturnType<typeof createDiscoveryRunner>;
   let batch: ReturnType<typeof createFullScanRunner> | undefined;
   const recordHttp = (record: ScanTransportRecord) => {
     const recorder = requestRecorder.getStore();
@@ -87,7 +106,14 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
   // share its global pace, iTunes-specific interval and Retry-After cooldown.
   const transportProviders =
     options.providers ??
-    createFullScanProviders({ ...options.providerOptions, onResponse: recordHttp });
+    createFullScanProviders({
+      ...options.providerOptions,
+      onResponse: recordHttp,
+      beforeRequest() {
+        options.providerOptions?.beforeRequest?.();
+        requestBudget.getStore()?.();
+      },
+    });
   const providers = Object.fromEntries(
     Object.entries(transportProviders).map(([name, provider]) => {
       const wrapped = { ...provider };
@@ -98,6 +124,8 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
         'appWithPeers',
         'enrich',
         'reviewsPage',
+        'extendedSearch',
+        'related',
       ] as const) {
         const operation = provider[method];
         if (!operation) continue;
@@ -108,26 +136,32 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
               ? store.one("SELECT id FROM jobs WHERE status='running' ORDER BY id LIMIT 1")?.id
               : undefined;
           const recorder =
-            owner === 'batch' && batch
-              ? batch.captureHttpRecorder()
-              : owner === 'hourly'
-                ? hourly.captureHttpRecorder()
-                : owner === 'manual'
-                  ? hourly.captureHttpRecorder(manualJobId)
-                  : undefined;
+            owner === 'discovery'
+              ? discovery.captureHttpRecorder()
+              : owner === 'batch' && batch
+                ? batch.captureHttpRecorder()
+                : owner === 'hourly'
+                  ? hourly.captureHttpRecorder()
+                  : owner === 'manual'
+                    ? hourly.captureHttpRecorder(manualJobId)
+                    : undefined;
           if (!recorder) throw new Error('Provider called outside coordinator ownership');
           // Async context retains the original task even if its aborted request settles
           // after a timeout and the next fair lane has begun.
-          return requestRecorder.run(recorder, () => {
-            if (owner === 'manual' && ['app', 'reviewsPage', 'enrich'].includes(method))
-              return manualJournal.invoke<unknown>(
-                manualJobId,
-                method === 'reviewsPage' ? 'reviews' : (method as 'app' | 'enrich'),
-                input,
-                () => operation(input),
-              );
-            return operation(input);
-          });
+          const invoke = () =>
+            requestRecorder.run(recorder, () => {
+              if (owner === 'manual' && ['app', 'reviewsPage', 'enrich'].includes(method))
+                return manualJournal.invoke<unknown>(
+                  manualJobId,
+                  method === 'reviewsPage' ? 'reviews' : (method as 'app' | 'enrich'),
+                  input,
+                  () => operation(input),
+                );
+              return operation(input);
+            });
+          return owner === 'discovery'
+            ? requestBudget.run(discovery.captureRequestBudget(), invoke)
+            : invoke();
         };
       }
       return [name, wrapped];
@@ -140,6 +174,17 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
     now: options.now,
     enabled: options.enabled,
   });
+  discovery = createDiscoveryRunner({
+    ...options.discoveryOptions,
+    store,
+    providers,
+    now: options.now,
+    enabled:
+      options.enabled !== false &&
+      options.discoveryOptions?.enabled !== false &&
+      Object.values(providers).some((p) => !!p.extendedSearch),
+  });
+  discovery.recover();
   const table = store.one("SELECT name FROM sqlite_master WHERE name='full_scan_runs'");
   const saved = table
     ? options.batchId
@@ -197,6 +242,7 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
     hourly: lane('hourly', hourly.runOnce),
     batch: batch ? lane('batch', batch.runOnce) : undefined,
     manual: lane('manual', worker.runOnce),
+    discovery: lane('discovery', discovery.runOnce),
   });
   const status = () =>
     getCollectionStatus(store, {
@@ -209,6 +255,7 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
   async function runOnce() {
     if (stopped) return false;
     hourly.schedule();
+    discovery.schedule();
     const done = await dispatcher.runOnce();
     store.run(
       'UPDATE monitor_state SET heartbeat_at=? WHERE id=1',
@@ -233,6 +280,7 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
   }
   return {
     hourly,
+    discovery,
     batch,
     worker,
     providers,
@@ -249,6 +297,7 @@ export function createCollectionCoordinator(options: CoordinatorOptions) {
       stopped = true;
       if (timer) clearTimeout(timer);
       hourly.stop();
+      discovery.stop();
       worker.stop();
       batch?.pause();
       dispatcher.stop();

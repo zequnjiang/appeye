@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, patch } from './api';
+import { patch } from './api';
+import { useResource } from './use-resource';
 import type { LoanAnalysis } from '../server/loan-identification';
 import type { Enrichment } from '../server/types';
 import type { MarketApp } from './types';
@@ -437,24 +438,11 @@ export function ObservationHistory({
   title: string;
   version?: number;
 }) {
-  const [offset, setOffset] = useState(0),
-    [data, setData] = useState<Record<string, unknown> | null>(null),
-    [error, setError] = useState('');
-  useEffect(() => {
-    let active = true;
-    setData(null);
-    setError('');
-    api<Record<string, unknown>>(`${endpoint}?limit=20&offset=${offset}`)
-      .then((d) => {
-        if (active) setData(d);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [endpoint, offset, version]);
+  const [offset, setOffset] = useState(0);
+  const { data, error } = useResource<Record<string, unknown>>(
+    `${endpoint}?limit=20&offset=${offset}`,
+    version,
+  );
   const rows =
     data && Array.isArray(data[listKey]) ? (data[listKey] as Record<string, unknown>[]) : [];
   return (
@@ -466,7 +454,7 @@ export function ObservationHistory({
       {!data && !error && <p>加载中…</p>}
       {rows.map((r, i) => (
         <FieldTree
-          key={`${offset}-${i}`}
+          key={`${endpoint}-${String(r.id ?? r.observedAt ?? i)}`}
           value={r}
           label={`${r.observedAt || r.fetchedAt || r.id || i} ${r.status ? statusLabels[String(r.status)] || r.status : r.keyword || ''}`}
           depth={1}
