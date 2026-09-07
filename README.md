@@ -69,6 +69,27 @@ SQLite WAL + 明确 SQL 迁移，规范字段和原始 JSON 并存。表名：`c
 
 [架构与 SQL 示例](docs/architecture.md) 包含数据模型、采集节奏、备份和后续迁移 PostgreSQL 的边界；[API 文档](docs/api.md) 描述所有接口。优先对只读副本做分析，避免 AI 查询阻塞工作库。需要安全备份时停止唯一服务，再复制主文件及存在的 WAL/SHM 文件；不停机请使用 SQLite online backup，不能只复制正在写入的主文件。
 
+## 一次性财务扫描与完整采集
+
+批次采集覆盖六国两个商店的财务榜单、配置关键词、所有原库应用及本轮新增信贷应用。新增 strong/possible 进入主库，证据不足的新对象保留在批次暂存。每个主库 App 刷新详情、七类补充及可继续取得的评论页；原有人工/legacy 分类保持不变。公开榜单和搜索有来源上限，不代表整个应用市场的枚举。
+
+先停止普通服务/worker并备份数据库，再运行批次；`--serve` 会提供已有认证后台，不启动普通worker：
+
+```bash
+FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --serve
+```
+
+同一 `--batch-id` 恢复未完成任务；`--retry-failed` 重试失败项，`--retry-warnings` 仅重试原始响应可被已验证布局适配恢复的 Google Play 开发者目录告警，保留原尝试和数据历史。`--max-tasks` / `--max-minutes` 仅暂停，不代表完成。Google Play 评论沿下一页 token 继续，App Store 受公开第10页边界限制。Apple详情默认按50个同国家ID批量lookup，仍保存每个App的原文、真实观测时间与来源；缺项或缺截图回退单项请求，`--apple-batch-size 0` 可关闭优化。批次结束后，用 `NODE_ENV=production npm start` 恢复普通服务。
+
+`--retry-developer-source-errors` 是单独的显式恢复入口：仅对本批次已保存的最后一次续页满足 HTTP 200、`qnKhOb` 空 payload、`PlayDataError` code 5 的 Google Play 部分开发者目录开启一轮恢复。任务保存本轮标识、原因、旧 HTTP 引用与累计尝试序号；重复启动同一开关不会自动开启第二轮。若再次取得部分目录和同一来源错误，保留 `developer-degraded` 告警并结束本轮；网络异常仍使用既有有限重试预算。这不是对上游 code 5 的修复，也不保证获得完整目录，不扩大 `--retry-warnings` 的原范围。
+
+```bash
+npx tsx scripts/full-scan.ts --batch-id finance-2026-09-07 --status
+npx tsx scripts/full-scan-audit.ts --batch-id finance-2026-09-07 --baseline data/batches/finance-2026-09-07-baseline.json --output data/batches/finance-2026-09-07-audit.json
+```
+
+状态和审计命令只读已有SQLite。批次账本使用 `full_scan_*` 表，完整HTTP响应、来源、暂存、尝试和分页断点留在本地，不能提交真实数据库或评论到GitHub。本轮范围、真实进展及验收以[需求 #11](https://github.com/zequnjiang/appeye/issues/11)、[需求文档](docs/requirements/FULL-SCAN-2026-09-07.md)和[执行报告](docs/reports/FULL-SCAN-EXECUTION.md)为准。
+
 ## GitHub 与 Agent 流转
 
 [需求 #1](https://github.com/zequnjiang/appeye/issues/1) → [后端 #2](https://github.com/zequnjiang/appeye/issues/2) / [后台 #3](https://github.com/zequnjiang/appeye/issues/3) → [测试与验收 #4](https://github.com/zequnjiang/appeye/issues/4)。

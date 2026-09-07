@@ -447,6 +447,7 @@ export class Store {
     kind: EnrichmentKind,
     result: EnrichmentResult,
     attemptedAt = now(),
+    onSaved?: () => void,
   ): Enrichment {
     if (!this.getApp(appId)) throw new Error('App not found');
     const success = result.status === 'available' || result.status === 'empty';
@@ -483,6 +484,8 @@ export class Store {
         null,
         result.note ?? null,
       );
+      // The batch ledger can mark this exact response applied in the same transaction.
+      onSaved?.();
       return this.listEnrichments(appId).find((r) => r.kind === kind)!;
     });
   }
@@ -692,7 +695,12 @@ export class Store {
       total: this.one(`SELECT COUNT(*) n ${from}`, ...params)!.n,
     };
   }
-  saveReviews(appId: number, reviews: NormalizedReview[], language?: string): number {
+  saveReviews(
+    appId: number,
+    reviews: NormalizedReview[],
+    language?: string,
+    fetchedAt = now(),
+  ): number {
     const app = this.getApp(appId);
     if (!app) throw new Error('App not found');
     const country = this.getCountry(app.country)!;
@@ -712,7 +720,7 @@ export class Store {
           review.version ?? null,
           review.reviewedAt ?? null,
           review.replyText ?? null,
-          now(),
+          fetchedAt,
           JSON.stringify(review.raw ?? review),
         );
         inserted += Number(r.changes);
