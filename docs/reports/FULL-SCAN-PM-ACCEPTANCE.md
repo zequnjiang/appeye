@@ -4,6 +4,7 @@
 - 负责人：Subagent产品经理PM。审阅日期：2026-09-07（Asia/Shanghai）。
 - 初始工程验收代码：`424ddf121263f52e164f9dde8d2c46fe2aae5433`；当时工作树干净，运行四文件SHA-256与`finance-2026-09-07-runtime-2.json`全部一致。后续局部修复与runtime-5证据分别记录于下文和专报。
 - GitHub：[运营议题 #11](https://github.com/zequnjiang/appeye/issues/11)、[草稿PR #12](https://github.com/zequnjiang/appeye/pull/12)。此报告不构成最终运营交付或关闭授权；最终证据和CI仍由CEO关联。
+- 后续工程合并判定：**允许将 PR #12 的 `f10e3c8a5c69f10f56a3a5a6482d5c2d39af901f` 按已验收工程阶段合并；#11保持打开。** 精确范围和依据见本文“PR #12 工程阶段合并授权”，不包含 #18 的进行中实现。
 - 需求：[11项FS-AC](../requirements/FULL-SCAN-2026-09-07.md)。证据：[CTO自检](FULL-SCAN-CTO-SELF-CHECK.md)、[Alex独立测试](FULL-SCAN-ALEX.md)、[实际阶段运行记录](FULL-SCAN-EXECUTION.md)。
 
 ## 验收依据
@@ -91,3 +92,24 @@ Alex独立解析全部3,803个成功Atom/XML来源；首次发现的1处CRLF/LF�
 允许CEO发布第一项、双店全部七类补充和Apple公开评论分页阶段验收通过的GitHub记录，并继续当前批次Google Play全部可分页评论与恢复。阶段全量审计通过，不等于“所有入库App完整采集完毕”，不允许据此删除待处理项、缩小既定范围、解除人工排除或将评论本地运行切片称为上游限制。
 
 最终验收必须收到CEO执行结束/恢复报告与Alex实际全集核查：2,024主库App的7类/全部可分页评论结果和已验收详情保持；没有queued/running/deferred、未尝试或尚可恢复却未处理的页；异常和真正上游限制逐项可证；原数据与分类保持，最终审计及运行设置恢复完成。届时PM另作正式运营结论；本报告当前结论保持**第一项通过，第二项继续，整体未完成**。
+
+## PR #12 工程阶段合并授权
+
+**PM判断：允许工程阶段合并，保持 #11 运营需求打开，不要求等待整个评论采集结束才把已验证工程入 main。** 此结论仅适用于 [PR #12](https://github.com/zequnjiang/appeye/pull/12) 的精确 head **`f10e3c8a5c69f10f56a3a5a6482d5c2d39af901f`**，不批准当前 [#18](https://github.com/zequnjiang/appeye/issues/18) / [PR #19](https://github.com/zequnjiang/appeye/pull/19) 的小时监测实现、部署或最终验收。
+
+依据 [工作流](../workflow.md#状态流转) 的明确约定：“若实现 PR 分阶段合并，需求仍保持打开，直到 PM 完成整体验收。” 本轮工程已完成 CTO 自检、Alex 独立回归及 PM 对应阶段验收，可以与后续长时间运营执行分开交付。此前各阶段“整体未放行/不能整体关闭”指 #11 全部运营目标，不能将这里的工程合并解释为该目标已完成。
+
+PM于2026-09-07独立读取 GitHub PR/CI 与本地精确提交内容，确认：
+
+| 工程合并证据 | 独立核查结果 |
+| --- | --- |
+| PR身份与范围 | GitHub返回 #12 为 OPEN / draft / MERGEABLE，base main、head codex/full-finance-scan，head正是上述 f10e3c8。 |
+| 最终CI | [Quality gates / verify，run 34061239546](https://github.com/zequnjiang/appeye/actions/runs/34061239546) 为 completed / success，headSha 与 f10e3c8 完全相同；不是引用另一个未合并或工作树提交的CI。 |
+| 已测试代码 | 与 `52cd7a85e53ecfb548b1d314bfa11306b8945980` 比较，f10e3c8仅变更4个索引需求/CTO/Alex/PM文档，无server/scripts/tests/package业务代码差异。 |
+| 独立工程验证 | 精确版本中的Alex正式报告为136/136测试、前后类型检查和生产构建通过；PM此前已对该代码的统计等值、索引部署和检查点续跑独立验收。未拿#18新增测试数代替这136项。 |
+| 实际工程使用 | 第一项发现/详情分析/信贷入库、双店七类补充及后续Apple公开评论已分别完成实际数据的Alex→PM阶段验收；它们支持工程可使用，但没有扩大为所有GP评论完成。 |
+| 已知剩余 | GP仍有原分页和7项网络耗尽失败待有界恢复及独立处置，属于尚未完成的运营范围。12项Apple资料失败和2项GP部分目录按已列来源限制继续保留，不改成成功资料。 |
+
+在该单活动采集runner、明确范围和既有操作方法内，未发现阻止本次已验收工程合并的未解决P0。当前 #18 引入的小时/手动/批次公平协调、多进程接管、跨采集来源时间线和审计适配仍须独立回归及PM验收，不能借本次工程合并视作已经通过。
+
+允许CEO将 #12 标记ready并合并上述head；PR说明和最后记录应注明“采集工程阶段交付，运营#11继续”，不得加入会自动关闭#11的关键字。合并后可调整stacked #19的base以运行其自身CI；这项仓库管理操作不授权启动未验收的新采集逻辑。若#12在合并前再引入业务代码变更，需重新核对应代码检查，而不能沿用本段精确head结论。
