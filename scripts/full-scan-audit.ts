@@ -29,6 +29,14 @@ try {
   if (!run) throw new Error('Batch not found');
   const baseline = values.baseline ? JSON.parse(readFileSync(values.baseline, 'utf8')) : null;
   if (baseline && baseline.batchId !== batchId) throw new Error('Baseline batch does not match');
+  const baselineApps = baseline?.members ?? baseline?.apps ?? [];
+  if (baseline && !Array.isArray(baseline.members ?? baseline.apps))
+    throw new Error('Baseline must explicitly contain apps or members');
+  if (
+    !Array.isArray(baselineApps) ||
+    baselineApps.some((app: any) => !Number.isSafeInteger(app.id) || app.id <= 0)
+  )
+    throw new Error('Baseline must contain positive member IDs');
   const targetApps = rows(
     `SELECT DISTINCT a.id,a.country,a.store,a.external_id,a.classification,a.classification_source,
       a.manual_override,a.first_seen_at FROM apps a JOIN full_scan_tasks t ON t.app_id=a.id
@@ -36,9 +44,25 @@ try {
     batchId,
   );
   const currentById = new Map(targetApps.map((app) => [app.id, app]));
-  const baselineIds = new Set<number>((baseline?.apps ?? []).map((app: any) => app.id));
+  const baselineIds = new Set<number>(baselineApps.map((app: any) => app.id));
+  if (baselineIds.size !== baselineApps.length)
+    throw new Error('Baseline member IDs must be unique');
+  // Other batch references and the independently frozen baseline detect a missing
+  // detail task. Deriving expected membership only from detail tasks would make
+  // that invariant tautological and silently lose an entirely omitted initial app.
+  const expectedIds = [
+    ...new Set<number>([
+      ...baselineIds,
+      ...rows(
+        'SELECT app_id FROM full_scan_tasks WHERE batch_id=? AND app_id IS NOT NULL UNION SELECT app_id FROM full_scan_candidates WHERE batch_id=? AND app_id IS NOT NULL',
+        batchId,
+        batchId,
+      ).map((row) => Number(row.app_id)),
+    ]),
+  ].sort((a, b) => a - b);
+  const cohortJson = JSON.stringify(expectedIds);
   const mismatches: { id: number; fields: string[] }[] = [];
-  for (const before of baseline?.apps ?? []) {
+  for (const before of baselineApps) {
     const after = currentById.get(before.id);
     const fields = after
       ? Object.keys(before).filter((key) => after[key] !== before[key])
@@ -49,28 +73,43 @@ try {
     capturedAt: new Date().toISOString(),
     batchId,
     run: { ...run, config: JSON.parse(run.config) },
+    cohort: {
+      definition:
+        'Existing detail targets, independent same-batch task/admission references, and supplied frozen baseline IDs; later hourly-only apps are excluded.',
+      expectedMembers: expectedIds.length,
+      detailTargets: targetApps.length,
+      initialMembershipVerified: !!baseline,
+      membersOutsideFrozenBaseline: baseline?.members
+        ? expectedIds.filter((id) => !baselineIds.has(id))
+        : null,
+      missingAppRecords: expectedIds.filter((id) => !one('SELECT id FROM apps WHERE id=?', id))
+        .length,
+      limitation: baseline
+        ? null
+        : 'Without an independent initial member baseline, an app missing from every batch reference cannot be verified.',
+    },
     baseline: baseline
       ? {
           capturedAt: baseline.capturedAt,
-          appCount: baseline.apps.length,
+          appCount: baselineApps.length,
           preservationMismatches: mismatches,
           newMainAppCount: targetApps.filter((app) => !baselineIds.has(app.id)).length,
         }
       : null,
     totals: {
-      mainApps: one('SELECT COUNT(*) n FROM apps').n,
+      allDatabaseMainApps: one('SELECT COUNT(*) n FROM apps').n,
       batchMainApps: targetApps.length,
       sourceRows: one('SELECT COUNT(*) n FROM full_scan_sources WHERE batch_id=?', batchId).n,
       uniqueDiscovered: one(
         'SELECT COUNT(*) n FROM (SELECT DISTINCT country,store,external_id FROM full_scan_sources WHERE batch_id=?)',
         batchId,
       ).n,
-      reviewsRetained: one('SELECT COUNT(*) n FROM reviews').n,
+      allDatabaseReviewsRetained: one('SELECT COUNT(*) n FROM reviews').n,
       reviewsSeenThisBatch: one(
         'SELECT COUNT(*) n FROM full_scan_review_seen WHERE batch_id=?',
         batchId,
       ).n,
-      snapshotsRetained: one('SELECT COUNT(*) n FROM snapshots').n,
+      allDatabaseSnapshotsRetained: one('SELECT COUNT(*) n FROM snapshots').n,
       httpResponses: one('SELECT COUNT(*) n FROM full_scan_http WHERE batch_id=?', batchId).n,
     },
     discovery: rows(
@@ -131,16 +170,19 @@ try {
     ),
     invariants: {
       missingDetailTasks: one(
-        "SELECT COUNT(*) n FROM apps a WHERE NOT EXISTS (SELECT 1 FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=a.id AND t.kind='detail')",
+        "SELECT COUNT(*) n FROM json_each(?) member WHERE NOT EXISTS (SELECT 1 FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=member.value AND t.kind='detail')",
+        cohortJson,
         batchId,
       ).n,
       mainAppsWithoutSevenSupplements: one(
-        `SELECT COUNT(*) n FROM apps a WHERE (SELECT COUNT(DISTINCT json_extract(t.payload,'$.kind'))
-         FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=a.id AND t.kind='enrich')<>7`,
+        `SELECT COUNT(*) n FROM json_each(?) member WHERE (SELECT COUNT(DISTINCT json_extract(t.payload,'$.kind'))
+         FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=member.value AND t.kind='enrich')<>7`,
+        cohortJson,
         batchId,
       ).n,
       mainAppsWithoutReviewStream: one(
-        "SELECT COUNT(*) n FROM apps a WHERE NOT EXISTS (SELECT 1 FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=a.id AND t.kind='reviews')",
+        "SELECT COUNT(*) n FROM json_each(?) member WHERE NOT EXISTS (SELECT 1 FROM full_scan_tasks t WHERE t.batch_id=? AND t.app_id=member.value AND t.kind='reviews')",
+        cohortJson,
         batchId,
       ).n,
       invalidSourceJson: one(
@@ -161,7 +203,7 @@ try {
         "SELECT COUNT(*) n FROM full_scan_tasks WHERE batch_id=? AND status='succeeded' AND (response IS NULL OR response_at IS NULL)",
         batchId,
       ).n,
-      duplicateReviewIdentities: one(
+      allDatabaseDuplicateReviewIdentities: one(
         'SELECT COUNT(*) n FROM (SELECT app_id,external_id FROM reviews GROUP BY app_id,external_id HAVING COUNT(*)>1)',
       ).n,
     },

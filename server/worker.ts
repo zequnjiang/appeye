@@ -1,6 +1,7 @@
 import type { Store } from './db.js';
 import { enrichmentKinds, type Job, type Providers } from './types.js';
 import { enrichmentContext } from './providers.js';
+import type { ManualReceipt } from './manual-collection.js';
 
 export interface WorkerOptions {
   store: Store;
@@ -11,6 +12,7 @@ export interface WorkerOptions {
   maxAttempts?: number;
   retryDelayMs?: number;
   schedule?: boolean;
+  observation?: (value: unknown) => ManualReceipt | undefined;
 }
 export function createWorker(options: WorkerOptions) {
   const { store, providers } = options;
@@ -108,7 +110,10 @@ export function createWorker(options: WorkerOptions) {
       const data = await request((signal) =>
         provider.app({ ...context, externalId: app.externalId, signal }),
       );
-      const snapshot = store.saveObservation(app.id, data);
+      const receipt = options.observation?.(data);
+      const snapshot = receipt?.alreadyApplied
+        ? undefined
+        : store.saveObservation(app.id, data, receipt?.observedAt, receipt?.onSaved);
       store.enqueueJob({
         type: 'reviews',
         country: app.country,
@@ -123,7 +128,12 @@ export function createWorker(options: WorkerOptions) {
         appId: app.id,
         maxAttempts: options.maxAttempts,
       });
-      return { appId: app.id, snapshotId: snapshot.id };
+      return {
+        appId: app.id,
+        snapshotId: snapshot?.id ?? null,
+        responseId: receipt?.responseId ?? null,
+        sourceObservedAt: receipt?.observedAt ?? null,
+      };
     }
     if (job.type === 'enrich') {
       const errors: string[] = [];
@@ -146,7 +156,9 @@ export function createWorker(options: WorkerOptions) {
                 raw: null,
                 note: '当前适配器未实现补充信息方法',
               };
-          store.saveEnrichment(app.id, kind, result);
+          const receipt = options.observation?.(result);
+          if (!receipt?.alreadyApplied)
+            store.saveEnrichment(app.id, kind, result, receipt?.observedAt, receipt?.onSaved);
           results[kind] = result.status;
         } catch (error) {
           const message = (error instanceof Error ? error.message : String(error)).slice(0, 4000);
@@ -163,14 +175,35 @@ export function createWorker(options: WorkerOptions) {
     const reviews = await request((signal) =>
       provider.reviews({ ...context, externalId: app.externalId, signal }),
     );
-    const stored = store.saveReviews(
-      app.id,
-      reviews,
-      job.store === 'app-store' ? 'und' : country.language,
-    );
+    const receipt = options.observation?.(reviews);
+    const replayed = receipt?.alreadyApplied ?? false;
+    const skippedOlder =
+      receipt && !replayed
+        ? [...new Set(reviews.map((row) => row.externalId))].filter((externalId) =>
+            store.one(
+              'SELECT id FROM reviews WHERE app_id=? AND external_id=? AND fetched_at>?',
+              app.id,
+              externalId,
+              receipt.observedAt,
+            ),
+          ).length
+        : 0;
+    const stored = replayed
+      ? 0
+      : store.saveReviews(
+          app.id,
+          reviews,
+          job.store === 'app-store' ? 'und' : country.language,
+          receipt?.observedAt,
+          receipt?.onSaved,
+        );
     return {
       fetched: reviews.length,
       upserted: stored,
+      responseId: receipt?.responseId ?? null,
+      sourceObservedAt: receipt?.observedAt ?? null,
+      replayed,
+      skippedOlder,
       window:
         job.store === 'google-play'
           ? '最新 100 条，按配置语言及店面请求'

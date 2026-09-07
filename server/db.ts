@@ -126,7 +126,7 @@ export class Store {
       });
     }
     for (const c of defaultCountries)
-      if (!this.getCountry(c.code)) this.upsertCountry({ ...c, enabled: true, intervalHours: 24 });
+      if (!this.getCountry(c.code)) this.upsertCountry({ ...c, enabled: true, intervalHours: 1 });
     this.backfillCurrentStoreData();
     this.backfillLoanAnalyses();
   }
@@ -203,8 +203,9 @@ export class Store {
     title?: string;
     sourceKeyword?: string;
     data?: NormalizedApp;
+    observedAt?: string;
   }): AppRecord {
-    const time = now();
+    const time = input.observedAt ?? now();
     const data = normalizeForStore(
       input.data ?? { externalId: input.externalId, title: input.title ?? input.externalId },
       input.store,
@@ -236,7 +237,7 @@ export class Store {
   }
   private appRow(row: Row): AppRecord {
     const observations = this.all(
-      "SELECT json_extract(data,'$.version') version,observed_at FROM snapshots WHERE app_id=? AND json_extract(data,'$.version') IS NOT NULL ORDER BY id",
+      "SELECT json_extract(data,'$.version') version,observed_at FROM snapshots WHERE app_id=? AND json_extract(data,'$.version') IS NOT NULL ORDER BY observed_at,id",
       row.id,
     );
     const versions: Row[] = [];
@@ -351,7 +352,10 @@ export class Store {
   }
   getRawDetail(appId: number): unknown {
     return parse(
-      this.one('SELECT raw FROM snapshots WHERE app_id=? ORDER BY id DESC LIMIT 1', appId)?.raw,
+      this.one(
+        'SELECT raw FROM snapshots WHERE app_id=? ORDER BY observed_at DESC,id DESC LIMIT 1',
+        appId,
+      )?.raw,
     );
   }
   backfillCurrentStoreData(): number {
@@ -584,7 +588,12 @@ export class Store {
   setAppError(id: number, error: string | null) {
     this.run('UPDATE apps SET last_error=? WHERE id=?', error, id);
   }
-  saveObservation(appId: number, data: NormalizedApp, observedAt = now()): Snapshot {
+  saveObservation(
+    appId: number,
+    data: NormalizedApp,
+    observedAt = now(),
+    onSaved?: (snapshotId: number) => void,
+  ): Snapshot {
     const app = this.getApp(appId);
     if (!app) throw new Error('App not found');
     if (String(data.externalId) !== app.externalId)
@@ -592,7 +601,7 @@ export class Store {
     const normalized = normalizeForStore(data, app.store);
     return this.transaction(() => {
       const previous = this.one(
-        'SELECT data FROM snapshots WHERE app_id=? ORDER BY id DESC LIMIT 1',
+        'SELECT data,observed_at FROM snapshots WHERE app_id=? ORDER BY observed_at DESC,id DESC LIMIT 1',
         appId,
       );
       const inserted = this.run(
@@ -602,7 +611,8 @@ export class Store {
         JSON.stringify(normalized),
         JSON.stringify(data.raw ?? data),
       );
-      if (previous) {
+      const superseded = !!previous && previous.observed_at > observedAt;
+      if (previous && !superseded) {
         const old = parse(previous.data);
         for (const field of changedFields)
           if (JSON.stringify(old[field] ?? null) !== JSON.stringify(normalized[field] ?? null))
@@ -617,16 +627,19 @@ export class Store {
             );
       }
 
-      this.run(
-        'UPDATE apps SET title=?,developer=?,data=?,last_seen_at=?,last_fetched_at=?,last_error=NULL WHERE id=?',
-        normalized.title,
-        normalized.developer ?? null,
-        JSON.stringify(normalized),
-        observedAt,
-        observedAt,
-        appId,
-      );
-      this.analyzeApp(appId, observedAt);
+      if (!superseded) {
+        this.run(
+          'UPDATE apps SET title=?,developer=?,data=?,last_seen_at=?,last_fetched_at=?,last_error=NULL WHERE id=?',
+          normalized.title,
+          normalized.developer ?? null,
+          JSON.stringify(normalized),
+          observedAt,
+          observedAt,
+          appId,
+        );
+        this.analyzeApp(appId, observedAt);
+      }
+      onSaved?.(Number(inserted.lastInsertRowid));
       return {
         id: Number(inserted.lastInsertRowid),
         appId,
@@ -639,7 +652,7 @@ export class Store {
   listSnapshots(appId: number, limit = 100, offset = 0): { snapshots: Snapshot[]; total: number } {
     return {
       snapshots: this.all(
-        'SELECT * FROM snapshots WHERE app_id=? ORDER BY id DESC LIMIT ? OFFSET ?',
+        'SELECT * FROM snapshots WHERE app_id=? ORDER BY observed_at DESC,id DESC LIMIT ? OFFSET ?',
         appId,
         limit,
         offset,
@@ -700,6 +713,7 @@ export class Store {
     reviews: NormalizedReview[],
     language?: string,
     fetchedAt = now(),
+    onSaved?: () => void,
   ): number {
     const app = this.getApp(appId);
     if (!app) throw new Error('App not found');
@@ -708,7 +722,7 @@ export class Store {
     this.transaction(() => {
       for (const review of reviews) {
         const r = this.run(
-          `INSERT INTO reviews(app_id,external_id,country,language,user_name,title,text,score,version,reviewed_at,reply_text,fetched_at,raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(app_id,external_id) DO UPDATE SET country=excluded.country,language=excluded.language,user_name=excluded.user_name,title=excluded.title,text=excluded.text,score=excluded.score,version=excluded.version,reviewed_at=excluded.reviewed_at,reply_text=excluded.reply_text,fetched_at=excluded.fetched_at,raw=excluded.raw`,
+          `INSERT INTO reviews(app_id,external_id,country,language,user_name,title,text,score,version,reviewed_at,reply_text,fetched_at,raw) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(app_id,external_id) DO UPDATE SET country=excluded.country,language=excluded.language,user_name=excluded.user_name,title=excluded.title,text=excluded.text,score=excluded.score,version=excluded.version,reviewed_at=excluded.reviewed_at,reply_text=excluded.reply_text,fetched_at=excluded.fetched_at,raw=excluded.raw WHERE excluded.fetched_at>=reviews.fetched_at`,
           appId,
           review.externalId,
           app.country,
@@ -725,6 +739,7 @@ export class Store {
         );
         inserted += Number(r.changes);
       }
+      onSaved?.();
     });
     return inserted;
   }

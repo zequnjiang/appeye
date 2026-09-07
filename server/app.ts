@@ -8,6 +8,8 @@ import { z } from 'zod';
 import type { Store } from './db.js';
 import { enrichmentKinds, type Providers, type StoreName } from './types.js';
 import type { Worker } from './worker.js';
+import { activityWindow, getMarketActivity, type CollectionStatus } from './market-activity.js';
+import { getCollectionStatus } from './hourly-monitor.js';
 
 export const limitations = [
   '首次发现是本系统第一次观察到该应用的时间，不代表实际新上架；商店提供的发布日期单独保存。',
@@ -26,7 +28,7 @@ const countrySchema = z
     language: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/),
     keywords: z.array(z.string().trim().min(1).max(100)).min(1).max(20),
     enabled: z.boolean().default(true),
-    intervalHours: z.number().min(1).max(720).default(24),
+    intervalHours: z.literal(1).default(1),
   })
   .strict();
 const pageSchema = z.object({
@@ -57,6 +59,7 @@ export interface AppOptions {
   sessionSecret?: string;
   providers?: Providers;
   worker?: Worker;
+  collection?: { status(): CollectionStatus };
   demoMode?: boolean;
   allowedOrigins?: string[];
   clientPath?: string;
@@ -173,6 +176,74 @@ export function createApp(options: AppOptions) {
     res.json({ authenticated: false });
   });
   app.get('/api/overview', (_req, res) => res.json({ ...store.overview(), dataset, limitations }));
+  app.get('/api/market-activity', (req, res) => {
+    const query = z
+      .object({
+        date: z.string().optional(),
+        timeZone: z.literal('Asia/Shanghai').optional(),
+        country: z
+          .string()
+          .regex(/^[a-z]{2}$/)
+          .optional(),
+        store: storeName.optional(),
+        classification: classification.optional(),
+        type: z.enum(['all', 'firstSeen', 'storeRelease', 'observedUpdate']).default('all'),
+        limit: z.coerce.number().int().min(1).max(200).default(50),
+        offset: z.coerce.number().int().min(0).default(0),
+      })
+      .strict()
+      .parse(req.query);
+    if (query.country && !store.getCountry(query.country)) throw new HttpError(400, '国家不存在');
+    try {
+      activityWindow(query.date, query.timeZone);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+    res.json({ ...getMarketActivity(store, query), dataset });
+  });
+  app.get('/api/collection/status', (_req, res) =>
+    res.json(
+      options.collection?.status() ??
+        getCollectionStatus(store, {
+          enabled: false,
+          mode: options.demoMode ? 'demo' : 'external',
+        }),
+    ),
+  );
+  app.get('/api/collection/tasks', (req, res) => {
+    const page = pageSchema.parse(req.query);
+    res.json({
+      tasks: store
+        .all(
+          'SELECT id,cycle_id cycleId,kind,country,store,external_id externalId,app_id appId,payload,status,attempts,next_run_at nextRunAt,created_at createdAt,started_at startedAt,finished_at finishedAt,error,result,response_id responseId FROM monitor_tasks ORDER BY id DESC LIMIT ? OFFSET ?',
+          page.limit,
+          page.offset,
+        )
+        .map((row) => ({
+          ...row,
+          payload: JSON.parse(row.payload),
+          result: row.result ? JSON.parse(row.result) : null,
+        })),
+      total: store.one('SELECT COUNT(*) n FROM monitor_tasks')!.n,
+      ...page,
+    });
+  });
+  app.get('/api/collection/tasks/:id', (req, res) => {
+    const id = z.coerce.number().int().positive().parse(req.params.id),
+      task = store.one('SELECT * FROM monitor_tasks WHERE id=?', id);
+    if (!task) throw new HttpError(404, '小时采集任务不存在');
+    res.json({
+      task,
+      attempts: store.all('SELECT * FROM monitor_attempts WHERE task_id=? ORDER BY id', id),
+      responses: store
+        .all('SELECT * FROM monitor_responses WHERE task_id=? ORDER BY id', id)
+        .map((row) => ({ ...row, data: JSON.parse(row.data) })),
+      http: store.all(
+        'SELECT id,fetched_at,url,method,status,content_type,error FROM monitor_http WHERE task_id=? ORDER BY id',
+        id,
+      ),
+    });
+  });
   app.get('/api/countries', (_req, res) => res.json({ countries: store.listCountries() }));
   app.post('/api/countries', (req, res) => {
     const data = countrySchema.parse(req.body);

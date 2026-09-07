@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import type { Store } from './db.js';
+import { normalizeForStore, type Store } from './db.js';
 import { classifyLoan } from './loan-identification.js';
 import {
   normalizeDeveloperContinuation,
@@ -102,6 +102,7 @@ export function ensureFullScanSchema(store: Store) {
     CREATE TABLE IF NOT EXISTS full_scan_responses (
       id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, attempt_id INTEGER NOT NULL, observed_at TEXT NOT NULL, response TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS full_scan_response_task_time ON full_scan_responses(task_id,observed_at,id);
     CREATE INDEX IF NOT EXISTS full_scan_http_batch ON full_scan_http(batch_id);
     CREATE INDEX IF NOT EXISTS full_scan_source_identity ON full_scan_sources(batch_id,country,store,external_id,discovery_id);
     CREATE INDEX IF NOT EXISTS full_scan_app_pages ON full_scan_tasks(batch_id,app_id,kind,page,status);
@@ -356,17 +357,48 @@ export function createFullScanRunner(options: {
       batchId,
     );
   }
-  function retryFailed() {
-    store.run(
-      "UPDATE full_scan_tasks SET status='queued',next_run_at=?,error=NULL,payload=json_set(payload,'$.recoveryAttemptBase',attempts) WHERE batch_id=? AND status='failed'",
-      time(),
-      batchId,
-    );
-    store.run(
-      "UPDATE full_scan_runs SET status='running',updated_at=? WHERE id=?",
-      time(),
-      batchId,
-    );
+  function retryFailed(scope?: { kind?: ScanTaskKind; taskIds?: number[] }): number {
+    if (scope?.kind && !['list', 'search', 'detail', 'enrich', 'reviews'].includes(scope.kind))
+      throw new Error('Invalid retry kind');
+    if (
+      scope?.taskIds &&
+      (!scope.taskIds.length ||
+        scope.taskIds.length > 1000 ||
+        scope.taskIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
+    )
+      throw new Error('retry taskIds must contain 1..1000 positive integer IDs');
+    return store.transaction(() => {
+      const ids = scope?.taskIds ? [...new Set(scope.taskIds)] : null;
+      if (ids)
+        for (const id of ids) {
+          const row = store.one('SELECT batch_id,kind FROM full_scan_tasks WHERE id=?', id);
+          if (!row || row.batch_id !== batchId || (scope?.kind && row.kind !== scope.kind))
+            throw new Error(`Retry task ${id} does not match the selected batch/kind`);
+        }
+      const clauses = ['batch_id=?', "status='failed'"],
+        params: (string | number)[] = [batchId];
+      if (scope?.kind) {
+        clauses.push('kind=?');
+        params.push(scope.kind);
+      }
+      if (ids) {
+        clauses.push(`id IN (${ids.map(() => '?').join(',')})`);
+        params.push(...ids);
+      }
+      const changed = store.run(
+        `UPDATE full_scan_tasks SET status='queued',next_run_at=?,error=NULL,payload=json_set(payload,'$.recoveryAttemptBase',attempts,'$.explicitRecoveryAt',?) WHERE ${clauses.join(' AND ')}`,
+        time(),
+        time(),
+        ...params,
+      );
+      if (changed.changes)
+        store.run(
+          "UPDATE full_scan_runs SET status='running',updated_at=? WHERE id=?",
+          time(),
+          batchId,
+        );
+      return Number(changed.changes);
+    });
   }
   function retryDeveloperWarnings(): number {
     const tasks = store
@@ -457,11 +489,11 @@ export function createFullScanRunner(options: {
     });
     return tasks.length;
   }
-  function recordHttp(record: ScanTransportRecord) {
+  function recordHttp(record: ScanTransportRecord, taskId = activeTask?.id ?? null) {
     const inserted = store.run(
       'INSERT INTO full_scan_http(batch_id,task_id,fetched_at,url,method,status,content_type,body,error) VALUES (?,?,?,?,?,?,?,?,?)',
       batchId,
-      activeTask?.id ?? null,
+      taskId,
       record.fetchedAt,
       record.url,
       record.method,
@@ -611,6 +643,7 @@ export function createFullScanRunner(options: {
     response: any,
     observedAt: string,
     responseId: number,
+    legacyCachedResponse = false,
   ): { result: unknown; stopReason?: string } {
     const payload = JSON.parse(task.payload);
     if (task.kind === 'list' || task.kind === 'search') {
@@ -723,29 +756,48 @@ export function createFullScanRunner(options: {
         json(data),
         observedAt,
       );
+      const result = {
+        appId: appId ?? null,
+        verdict: analysis.verdict,
+        admitted: !!appId,
+        appliedResponseId: responseId,
+        provenance: response?._fullScanDetailEnvelope
+          ? response.provenance
+          : { method: 'individual' },
+      };
       if (appId) {
-        // A replay of a cached successful response must not fabricate a fresh observation.
-        if (
-          !store.one(
-            'SELECT id FROM snapshots WHERE app_id=? AND observed_at=? LIMIT 1',
-            appId,
-            observedAt,
-          )
-        )
-          store.saveObservation(appId, data, observedAt);
+        // Identity is the persisted response, not a millisecond shared by two lanes.
+        // The Store retains older snapshots without rolling back newer current data.
+        const previousResult = store.one(
+          'SELECT result FROM full_scan_tasks WHERE id=?',
+          task.id,
+        )?.result;
+        if (!previousResult || JSON.parse(previousResult).appliedResponseId !== responseId) {
+          // Pre-receipt versions could crash after the snapshot commit. Only that
+          // legacy cached path (no prior response ledger identity) may reuse a
+          // snapshot, and both normalized data and complete raw must match.
+          const legacySnapshot = legacyCachedResponse
+            ? store.one(
+                'SELECT id FROM snapshots WHERE app_id=? AND observed_at=? AND data=? AND raw=? LIMIT 1',
+                appId,
+                observedAt,
+                json(normalizeForStore(data, task.store)),
+                json(data.raw ?? data),
+              )
+            : undefined;
+          if (legacySnapshot)
+            store.run('UPDATE full_scan_tasks SET result=? WHERE id=?', json(result), task.id);
+          else
+            store.saveObservation(appId, data, observedAt, () =>
+              store.run('UPDATE full_scan_tasks SET result=? WHERE id=?', json(result), task.id),
+            );
+        }
         store.run('UPDATE full_scan_tasks SET app_id=? WHERE id=?', appId, task.id);
         attachSources(appId, task);
         includeApp(appId);
       }
       return {
-        result: {
-          appId: appId ?? null,
-          verdict: analysis.verdict,
-          admitted: !!appId,
-          provenance: response?._fullScanDetailEnvelope
-            ? response.provenance
-            : { method: 'individual' },
-        },
+        result,
         stopReason: appId ? undefined : 'insufficient-kept-in-staging',
       };
     }
@@ -800,9 +852,21 @@ export function createFullScanRunner(options: {
         row.externalId,
       ),
     ).length;
+    const skippedOlder = uniqueRows.filter((row) =>
+      store.one(
+        'SELECT id FROM reviews WHERE app_id=? AND external_id=? AND fetched_at>?',
+        task.app_id!,
+        row.externalId,
+        observedAt,
+      ),
+    ).length;
     const counts = previousResult
       ? JSON.parse(previousResult)
-      : { added: uniqueRows.length - existingCount, updated: existingCount };
+      : {
+          added: uniqueRows.length - existingCount,
+          updated: existingCount - skippedOlder,
+          skippedOlder,
+        };
     // Commit counters before upsert, then reuse them if a saved response is replayed after interruption.
     store.run('UPDATE full_scan_tasks SET result=? WHERE id=?', json(counts), task.id);
     store.saveReviews(
@@ -864,6 +928,7 @@ export function createFullScanRunner(options: {
         fetched: rows.length,
         added: counts.added,
         updated: counts.updated,
+        skippedOlder: counts.skippedOlder ?? 0,
         fingerprint,
         nextCursor: page.nextCursor ?? null,
         source: page.source,
@@ -1019,7 +1084,13 @@ export function createFullScanRunner(options: {
           task.id,
         );
       }
-      const applied = applyTask(task, response, observedAt, responseId);
+      const applied = applyTask(
+        task,
+        response,
+        observedAt,
+        responseId,
+        !!task.response && !cachedResponse,
+      );
       store.run(
         "UPDATE full_scan_tasks SET status='succeeded',result=?,stop_reason=?,finished_at=?,error=NULL WHERE id=?",
         json(applied.result),
@@ -1111,6 +1182,10 @@ export function createFullScanRunner(options: {
     retryDeveloperWarnings,
     retryDeveloperSourceErrors,
     recordHttp,
+    captureHttpRecorder() {
+      const id = activeTask?.id ?? null;
+      return (record: ScanTransportRecord) => recordHttp(record, id);
+    },
     summary,
     runOnce,
     pause() {

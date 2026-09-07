@@ -1,16 +1,7 @@
 import 'dotenv/config';
 import { parseArgs } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
-import {
-  existsSync,
-  mkdirSync,
-  openSync,
-  closeSync,
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -18,6 +9,8 @@ import { createStore } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { createFullScanRunner, type FullScanConfig } from '../server/full-scan.js';
 import { createFullScanProviders } from '../server/full-scan-providers.js';
+import { acquireCollectorLock } from '../server/collector-lock.js';
+import type { ScanTaskKind } from '../server/full-scan.js';
 import type { StoreName } from '../server/types.js';
 
 const help = `Appeye finance scan (public source bounds apply; not a full-store census)
@@ -29,6 +22,9 @@ npx tsx scripts/full-scan.ts --batch-id finance-YYYY-MM-DD --status
   --batch-id ID           Stable ID; same ID resumes checkpoints, never redoes successful pages
   --status                Read-only status; does not migrate, create, seed or fetch anything
   --retry-failed          Requeue failed tasks in this batch; successful tasks remain untouched
+  --retry-kind reviews   Restrict --retry-failed to one task kind
+  --retry-task-ids 1,2    Restrict --retry-failed to these exact IDs; rejects wrong batch/kind
+  --retry-only           With scoped --retry-failed, persist requeue and exit without collecting
   --retry-warnings        Explicitly retry only Google developer-degraded tasks, preserving old evidence
   --retry-developer-source-errors  One marked recovery round for verified Google developer RPC code 5
                                   Repeated partial results keep their warning; no completeness guarantee
@@ -133,6 +129,9 @@ export async function main(args = process.argv.slice(2)) {
       status: { type: 'boolean' },
       serve: { type: 'boolean' },
       'retry-failed': { type: 'boolean' },
+      'retry-kind': { type: 'string' },
+      'retry-task-ids': { type: 'string' },
+      'retry-only': { type: 'boolean' },
       'retry-warnings': { type: 'boolean' },
       'retry-developer-source-errors': { type: 'boolean' },
       'batch-id': { type: 'string' },
@@ -166,6 +165,19 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (!batchId) throw new Error('--batch-id is required for an explicit, resumable batch');
+  const retryIds = values['retry-task-ids']?.split(',').map((x) => Number(x.trim()));
+  const retryKind = values['retry-kind'] as ScanTaskKind | undefined;
+  if ((retryIds || retryKind || values['retry-only']) && !values['retry-failed'])
+    throw new Error('Scoped retry flags require --retry-failed');
+  if (values['retry-only'] && (!retryIds?.length || !retryKind))
+    throw new Error('--retry-only requires explicit --retry-kind and --retry-task-ids');
+  if (
+    retryIds &&
+    (retryIds.length > 1000 || retryIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
+  )
+    throw new Error('Invalid --retry-task-ids');
+  if (retryKind && !['list', 'search', 'detail', 'enrich', 'reviews'].includes(retryKind))
+    throw new Error('Invalid --retry-kind');
   if (!existsSync(databasePath))
     throw new Error('Refusing to silently create a different empty live database');
   if (process.env.DEMO_MODE === 'true') throw new Error('A full live scan cannot run in demo mode');
@@ -204,23 +216,7 @@ export async function main(args = process.argv.slice(2)) {
   if (values['max-attempts'] !== undefined)
     config.maxAttempts = integer(values['max-attempts'], 3, 1, 10, 'max-attempts');
   const reportPath = resolve(values.report ?? `data/batches/${batchId}.json`);
-  const lockPath = `${databasePath}.full-scan.lock`;
-  if (existsSync(lockPath)) {
-    const old = JSON.parse(readFileSync(lockPath, 'utf8'));
-    try {
-      process.kill(Number(old.pid), 0);
-      throw new Error(`Batch process ${old.pid} still holds ${lockPath}`);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-    unlinkSync(lockPath);
-  }
-  const fd = openSync(lockPath, 'wx', 0o600);
-  writeFileSync(
-    fd,
-    JSON.stringify({ pid: process.pid, batchId, startedAt: new Date().toISOString() }),
-  );
-  closeSync(fd);
+  const lock = acquireCollectorLock(databasePath, `full-scan:${batchId}`);
   let store: ReturnType<typeof createStore> | undefined;
   let server: ReturnType<ReturnType<typeof createApp>['listen']> | undefined;
   let stopping = false;
@@ -242,10 +238,27 @@ export async function main(args = process.argv.slice(2)) {
       appleBatchSize,
       onResponse: (response) => runner!.recordHttp(response),
     });
+    if (
+      values['retry-only'] &&
+      !store.one('SELECT id FROM full_scan_runs WHERE id=? AND seeded=1', batchId)
+    )
+      throw new Error('--retry-only requires an existing seeded batch');
     runner = createFullScanRunner({ store, providers, batchId, config });
+    if (values['retry-only']) {
+      console.log(
+        JSON.stringify({
+          event: 'scoped-failures-requeued',
+          batchId,
+          kind: retryKind,
+          taskIds: retryIds,
+          count: runner.retryFailed({ kind: retryKind, taskIds: retryIds }),
+        }),
+      );
+      return;
+    }
     runner.recover();
     runner.seed();
-    if (values['retry-failed']) runner.retryFailed();
+    if (values['retry-failed']) runner.retryFailed({ kind: retryKind, taskIds: retryIds });
     if (values['retry-warnings'])
       console.log(
         JSON.stringify({
@@ -331,7 +344,7 @@ export async function main(args = process.argv.slice(2)) {
     process.off('SIGTERM', stop);
     if (server) await new Promise<void>((resolveClose) => server!.close(() => resolveClose()));
     store?.close();
-    if (existsSync(lockPath)) unlinkSync(lockPath);
+    lock.release();
   }
 }
 

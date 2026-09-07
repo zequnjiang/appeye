@@ -62,6 +62,7 @@ import type {
 import '@fontsource-variable/dm-sans';
 import '@fontsource-variable/manrope';
 import './styles.css';
+import { MarketActivity } from './MarketActivity';
 
 const countryFlags: Record<string, string> = {
   th: '🇹🇭',
@@ -608,7 +609,7 @@ function Dashboard({
           )}
           <div className="panel-note">
             <Clock3 size={15} />
-            国家采集周期可在设置中调整
+            每小时监测 · 可在设置中启用或暂停国家
           </div>
         </section>
       </div>
@@ -1356,76 +1357,6 @@ function Reviews({
   );
 }
 
-function ChangesPage({
-  version,
-  countries,
-  onSelect,
-}: {
-  version: number;
-  countries: Country[];
-  onSelect: (id: number) => void;
-}) {
-  const [country, setCountry] = useState(''),
-    [store, setStore] = useState(''),
-    [field, setField] = useState(''),
-    [offset, setOffset] = useState(0);
-  useEffect(() => setOffset(0), [country, store, field]);
-  const { data, error, loading } = useData<{ changes: Change[]; total: number }>(
-    '/changes' + query({ country, store, field, offset, limit: 20 }),
-    version,
-  );
-  return (
-    <>
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">MARKET SIGNALS</span>
-          <h1>市场动态</h1>
-          <p>跟踪版本、描述与指标变化，保留每一次观测证据。</p>
-        </div>
-      </div>
-      <section className="panel">
-        <Filters {...{ countries, country, setCountry, store, setStore }}>
-          <select
-            aria-label="筛选变化类型"
-            value={field}
-            onChange={(e) => setField(e.target.value)}
-          >
-            <option value="">全部变化</option>
-            {[
-              'version',
-              'description',
-              'score',
-              'ratings',
-              'minInstalls',
-              'releaseNotes',
-              'title',
-              'developer',
-            ].map((f) => (
-              <option value={f} key={f}>
-                {fields[f]}
-              </option>
-            ))}
-          </select>
-        </Filters>
-        {error ? (
-          <ErrorBox message={error} />
-        ) : loading ? (
-          <Loading />
-        ) : data?.changes.length ? (
-          <>
-            <ChangeList changes={data.changes} onSelect={onSelect} />
-            <Pagination offset={offset} total={data.total} limit={20} onChange={setOffset} />
-          </>
-        ) : (
-          <Empty
-            title="尚无匹配的市场动态"
-            description="应用完成基线采集后，后续字段变化会自动出现在这里。"
-          />
-        )}
-      </section>
-    </>
-  );
-}
 function JobsPage({
   version,
   countries,
@@ -1475,7 +1406,9 @@ function JobsPage({
       </div>
       <div className="notice slim">
         <Clock3 size={18} />
-        <p>已启用国家按设置周期自动发现应用。采集失败会有限重试，仍失败的任务可手动重试。</p>
+        <p>
+          已启用国家每小时自动发现应用并刷新详情。小时任务进度见市场动态；这里管理手动采集任务。
+        </p>
       </div>
       <section className="panel">
         <div className="filters">
@@ -1622,7 +1555,7 @@ function SettingsPage({
         <div>
           <span className="eyebrow">MONITORING CONFIGURATION</span>
           <h1>市场设置</h1>
-          <p>按国家配置发现关键词、采集语言和执行周期。</p>
+          <p>按国家配置发现关键词、采集语言与启停状态。启用后每小时自动监测。</p>
         </div>
         <button className="button primary" onClick={onCreate}>
           <Plus size={17} />
@@ -1710,7 +1643,6 @@ function CountryForm({
     [name, setName] = useState(country?.name || ''),
     [language, setLanguage] = useState(country?.language || 'en'),
     [keywords, setKeywords] = useState(country?.keywords.join('\n') || ''),
-    [interval, setInterval] = useState(country?.intervalHours || 24),
     [enabled, setEnabled] = useState(country?.enabled ?? true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
@@ -1726,7 +1658,7 @@ function CountryForm({
         .split(/[\n,，]/)
         .map((s) => s.trim())
         .filter(Boolean),
-      intervalHours: interval,
+      intervalHours: 1,
       enabled,
     };
     try {
@@ -1777,15 +1709,8 @@ function CountryForm({
             />
           </label>
           <label>
-            采集周期（小时）
-            <input
-              required
-              type="number"
-              min="1"
-              max="720"
-              value={interval}
-              onChange={(e) => setInterval(Number(e.target.value))}
-            />
+            自动监测周期
+            <input readOnly value="每 60 分钟" />
           </label>
         </div>
         <label>
@@ -1968,7 +1893,9 @@ function AddAppForm({
 }
 
 function Workspace({ session, onLogout }: { session: Session; onLogout: () => void }) {
-  const [page, setPage] = useState('overview'),
+  const [page, setPage] = useState(() =>
+      window.location.hash === '#market-activity' ? 'changes' : 'overview',
+    ),
     [appId, setAppId] = useState<number | null>(null),
     [version, setVersion] = useState(0),
     [modal, setModal] = useState<'discover' | 'add' | 'country' | null>(null),
@@ -2000,6 +1927,11 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
   function navigate(p: string) {
     setPage(p);
     setAppId(null);
+    window.history.replaceState(
+      null,
+      '',
+      p === 'changes' ? '#market-activity' : window.location.pathname + window.location.search,
+    );
     window.scrollTo(0, 0);
   }
   function select(id: number) {
@@ -2142,7 +2074,12 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
               onAdd={() => setModal('add')}
             />
           ) : page === 'changes' ? (
-            <ChangesPage version={version} countries={countries} onSelect={select} />
+            <MarketActivity
+              version={version}
+              countries={countries}
+              onSelect={select}
+              onJobs={() => navigate('jobs')}
+            />
           ) : page === 'jobs' ? (
             <JobsPage
               version={version}
