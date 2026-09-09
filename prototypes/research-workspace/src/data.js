@@ -210,7 +210,18 @@ export function createFixtures() {
             : `https://apps.apple.com/${country.code}/app/id${1100000000 + ci * 100 + index}`,
         ruleVersion: 'demo-personal-loan-v1',
         confidence: 86 + (index % 10),
-        privacyUrl: 'https://example.com/demo-privacy',
+        websiteUrl:
+          id === 'th-19'
+            ? null
+            : id === 'ar-22'
+              ? 'javascript:alert("demo")'
+              : 'https://example.com/#demo-website',
+        privacyUrl:
+          id === 'th-19'
+            ? null
+            : id === 'ar-22'
+              ? 'invalid-demo-address'
+              : 'https://example.com/#demo-privacy',
         reviews: [
           {
             id: `${id}-r1`,
@@ -454,6 +465,8 @@ export function createPendingDemo(apps, events) {
     iconUrl: null,
     iconIndex: null,
     iconNote: '新模拟身份尚未取得图标',
+    websiteUrl: null,
+    privacyUrl: null,
     reviews: [],
   };
   added.source = storeSource(added);
@@ -514,6 +527,8 @@ export function admitCandidate(model, id) {
     iconUrl: null,
     iconIndex: null,
     iconNote: '新模拟身份尚未取得图标',
+    websiteUrl: null,
+    privacyUrl: null,
     reviews: [],
     version: '1.0.0',
     oldVersion: null,
