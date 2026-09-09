@@ -72,3 +72,20 @@ CEO 精确复核了截图按钮按 Enter 打开、关闭按钮按 Escape 后焦�
 PM 确认静态“几小时前”文案与真实示例事件不一致，已移除首页对该固定文案的依赖。新增 `latestMarketObservation`，从当前国家、日期、已确认分类和现金贷范围的事件中选取最大实际观测时间，稳定返回同事件来源和同应用名称。首页列名“最近动态”，显示北京时间时分、事件类型与应用名；所选范围无事件明确显示空态。
 
 CTO 新检查验证最大实际观测时间、来源和标题匹配、历史日/空日、pending 应用前后及输入数据不变。此次修复后 `npm test` **24/24 通过**，`npm run build` 通过，JS 已冻结交 Alex 最终独立回归与 CEO 截图。
+
+## PR #36 干净 CI 的构建顺序修复（2026-09-09）
+
+关联 [PR #36](https://github.com/zequnjiang/appeye/pull/36)、[实际失败 run 34304593511](https://github.com/zequnjiang/appeye/actions/runs/34304593511)。原型 job 原先执行 `npm ci → npm test → npm run build`。其中 `sites-worker.test.mjs:65` 检查 `dist/client/index.html` 等三个必要产物；干净 CI 尚未构建时失败，实际为 25/26 通过。此前本地目录已有构建产物，因此本地先测试的顺序未暴露问题。生产 `verify` job 的既有流程保持不变。
+
+最小修复仅把原型 job 调整为 **`npm ci → npm run build → npm test`**，并同步原型 README 验证代码块的相同顺序。不修改产品代码、测试内容或既有产物要求，不通过跳过检查掩盖失败。
+
+CTO 在独立 ignored 目录 `.artifacts/prototype-clean-ci-qzqcw6oy` 复制原型源码，明确排除 `dist`，仅链接已安装原型依赖，未重新安装依赖，未操作生产目录。使用本机 Node v25.9.0：
+
+1. 确认初始 `dist` 不存在，直接 `npm test` 复现 **25/26**；唯一失败为上述 `ENOENT dist/client/index.html`。
+2. 同一隔离目录执行 `npm run build`，退出码 0，生成原有三个所需产物。
+3. 随后 `npm test` **26/26 通过**。日志保存在该目录 `build.log` 和 `test-after-build.log`。
+4. 对本次 CI、README、自检报告执行 `git diff --check`，通过。
+
+此验证证明构建产物依赖和执行顺序已修正；GitHub Node 24 / Ubuntu 的新一次 CI 运行仍由 CEO 提交后复核，不把本地检查称为远程 CI 已通过。已交接 Alex 独立确认，未提交或推送。
+
+附加完整干净环境检查：另建 `.artifacts/prototype-fresh-ci-s0duo9uk`，`fresh-state.json` 记录初始 `dist=false`、`node_modules=false` 和所有复制源文件 SHA256。按精确顺序运行 **`npm ci → npm run build → npm test → npm run test:sites`**，四步退出码均为 0；测试 **26/26**，打包检查 **4/4**。相应日志 `npm-ci.log`、`build.log`、`test.log`、`sites.log` 均保存在该 ignored 目录。前后源文件与原型目录的 SHA256 全等，三个构建入口存在。此检查同样使用本机 Node v25.9.0，不替代 GitHub Node 24 / Ubuntu 运行结果。

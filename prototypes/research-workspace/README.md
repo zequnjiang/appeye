@@ -16,8 +16,8 @@ npm run dev -- --host 127.0.0.1 --port 4173 --strictPort
 预览地址为 `http://127.0.0.1:4173/`。仅监听本机，不对外部署。
 
 ```sh
-npm test
 npm run build
+npm test
 ```
 
 构建产物在本原型的 `dist/`，不会覆盖主项目的 `dist/`。保留 Product Design 模板的 Worker 和 Sites 构建约定，当前交付不发布到 Sites。

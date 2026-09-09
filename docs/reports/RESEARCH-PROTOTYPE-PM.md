@@ -73,3 +73,17 @@ PM 读取 [North 导出](../../prototypes/research-workspace/reference/qa/north-
 本次放行仅意味着独立原型满足用户已选方案与可操作核心流程。共享市场库和私有研究、邀请及身份切换均为模拟；数据不是实际市场观察，商店图为本地示意素材，权限不等于设备授权/APK 审计。原型未替换正式后台，不改变原采集和小时监测。
 
 CEO 仍须把代码、需求、CTO/Alex/PM 报告及归档证据统一提交 GitHub，核对最终提交 CI、关联 PR 与 #35，之后完成合并和关闭。若最终源码改变，按变更影响重新核验；仅补提交/PR/CI 链接不需要重复业务测试。原 [全量采集 #11](https://github.com/zequnjiang/appeye/issues/11) 与 [续页来源限制 #24](https://github.com/zequnjiang/appeye/issues/24) 不由本次原型验收结项。
+
+## PR #36 干净 CI 顺序修复：有限增量验收
+
+2026-09-09，**本增量验收通过，原 RP-AC-01–10 功能结论保持有效；最终精确提交远端 CI 通过后才可合并/关闭。** 关联 [PR #36](https://github.com/zequnjiang/appeye/pull/36) 和 [首次失败 run 34304593511](https://github.com/zequnjiang/appeye/actions/runs/34304593511)。原型实现已提交为 `d503190`，初次 PM 报告为 `a3053db`；前文“尚待统一提交”保留其验收时点，本节记录后续发布阶段事实。
+
+该次远端运行生产 `verify` 通过，原型 job 因干净目录没有 `dist/client/index.html` 而 25/26，不能称整个 CI 成功。原因是原 `npm test → npm run build` 顺序与打包入口检查的前置条件相反；此前本地目录已有产物，原本地 26/26 不能证明干净工作流正确。
+
+PM 只读核对实际 diff、`sites-worker.test.mjs` 产物检查及 CTO/Alex 正式增量报告：仅将原型工作流改为 **`npm ci → npm run build → npm test`**，同步原型 README；生产 `verify`、产品源码和测试内容不变，没有跳过或删除失败用例。本次不重复浏览器或生产项目测试。
+
+Alex 在独立副本 `.artifacts/alex-prototype-ci-3plgib` 验证无 `dist` 时 25/26，唯一错误为上述 ENOENT；构建成功后 26/26，另行打包检查 4/4，均无跳过。聚合 `.artifacts/alex-prototype-ci-order.json` 记录 2026-09-09T02:54:03.685Z 的结果。PM 独立复核了 **27 个输入文件与隔离副本/当前原型的 SHA 双向匹配、三个产物 SHA 匹配、四份原始日志 SHA 匹配**，并读取其中的失败和成功计数。该独立回归链接已有依赖，Alex 没有重新执行 `npm ci`。
+
+完整重新安装证据另由 CTO 的 `.artifacts/prototype-fresh-ci-s0duo9uk` 提供：无 `dist`/`node_modules` 起步，`npm ci → build → test → test:sites` 四步成功；Alex 已独立读取该状态文件与日志。安装验证归属 CTO，不混称 Alex 实施。双方本机均为 Node v25.9.0；**新的 GitHub Node 24 / Ubuntu 结果仍待 CEO 提交后核对，本报告不提前宣布远端已通过。**
+
+本增量完成 CTO 自检 → Alex 独立回归 → PM 审阅，修复范围与故障相符。CEO 可统一提交这些有限改动和报告，再核对精确 HEAD 的两个 CI job，成功后按原放行结论合并 PR #36、关闭 #35。下载限制、mock/生产边界以及 #11/#24 的独立状态均不改变。

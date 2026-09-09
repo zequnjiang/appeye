@@ -132,3 +132,24 @@ IAB `pageAssets`观测到26个资源（16脚本、5样式、4图片、1字体）
 | RP-AC-10 | 通过。CTO→Alex顺序保留，最终26测试/build/sites4、桌面/817/390与关键流程证据齐；最终产品放行由PM完成。 |
 
 最终审阅聚合`.artifacts/alex-research-prototype-acceptance.json`包含源码/独立测试/三日志/浏览器事实/导出文件/截图SHA、26项结果和明确范围。根目录生产代码、数据库、运行服务和Git未由Alex修改；所有权仅三个`tests/alex-*.test.mjs`与本报告。后续SaaS鉴权、真实邀请、真实市场/商店采集和其他浏览器下载兼容均不在本原型完成声明内。
+
+## PR #36 干净 CI 顺序修复的限定回归（2026-09-09）
+
+关联 [Issue #35](https://github.com/zequnjiang/appeye/issues/35)、[PR #36](https://github.com/zequnjiang/appeye/pull/36) 与 [失败 run 34304593511](https://github.com/zequnjiang/appeye/actions/runs/34304593511)。产品此前已完成 PM 验收；本次发现的是干净 CI 的执行顺序问题：原型 `npm test` 包含检查三个 `dist` 打包入口的用例，工作流却先测试后构建。此前本地测试目录已有产物，未暴露这一前置条件，原 26/26 结果不能据此证明干净 CI 顺序正确。
+
+Alex 独立审阅差异，确认仅调整原型工作流为 `npm ci → npm run build → npm test`，同步 README 顺序并补充 CTO 报告；生产 `verify` job 逐字不变，产品源码和测试内容无差异，打包检查没有删除或跳过。
+
+独立副本 `.artifacts/alex-prototype-ci-3plgib` 初始没有 `dist` 或 `node_modules`，核对复制的 27 个输入文件 SHA 后，明确链接已安装原型依赖。Alex 在该副本实际执行：
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 构建前 `npm test` | 退出码 1，25/26；唯一失败为 `ENOENT dist/client/index.html`，复现原故障。 |
+| `npm run build` | 退出码 0，三个要求的打包入口存在。 |
+| 构建后 `npm test` | 退出码 0，26/26，0 失败、0 跳过。 |
+| `npm run test:sites` | 退出码 0，4/4；这四项已包含于 26 项，不另计总数。 |
+
+四份日志 `before-build.log`、`build.log`、`after-build.log`、`sites.log` 均保留在该副本。聚合 `.artifacts/alex-prototype-ci-order.json` 记录 2026-09-09T02:54:03.685Z、Node v25.9.0、命令结果、日志/入口 SHA 和前后输入文件哈希一致性。Alex 没有在这次独立复现中重新执行 `npm ci`，也未改原型实际预览产物或访问生产服务。
+
+另独立读取 CTO 的 `.artifacts/prototype-fresh-ci-s0duo9uk/fresh-state.json` 及四份日志：该副本初始同样无 `dist`/`node_modules`，实际全流程 `npm ci → build → test → test:sites` 成功，26/26 与 4/4。此依赖安装证据归属 CTO，不能混称 Alex 执行。双方均使用本机 Node v25.9.0；GitHub Node 24 / Ubuntu 的精确最终提交 CI 由 CEO 提交后核对，本报告不提前声称远程已通过。
+
+**限定回归通过，交 PM 验收该 CI 修复增量。** 原型功能、页面和截图未变，本轮不重复浏览器或生产项目测试；原始失败及本地环境边界完整保留。
