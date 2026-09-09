@@ -97,6 +97,7 @@ export interface CollectionStatus {
   }>;
 }
 export interface ActivityQuery {
+  appIds?: number[];
   date?: string;
   timeZone?: string;
   country?: string;
@@ -175,7 +176,9 @@ export function getMarketActivity(
   );
   const events: MarketActivityEvent[] = [];
   const inWindow = (at: string | null) => !!at && at >= window.windowStart && at < window.windowEnd;
+  const allowedIds = query.appIds ? new Set(query.appIds) : null;
   for (const app of apps) {
+    if (allowedIds && !allowedIds.has(app.id)) continue;
     const current = JSON.parse(app.data),
       release = releaseEvidence(current);
     const base: MarketActivityEvent = {

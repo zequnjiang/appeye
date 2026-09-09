@@ -26,6 +26,8 @@ export interface LoanEvidence {
   unit?: string;
 }
 export interface LoanAnalysis {
+  configurationVersion?: number;
+  autoConfirmStrong?: boolean;
   classification: 'confirmed' | 'candidate';
   verdict: 'strong' | 'possible' | 'insufficient';
   confidence: number;

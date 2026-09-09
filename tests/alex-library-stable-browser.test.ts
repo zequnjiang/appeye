@@ -9,8 +9,8 @@ after(async () => { await harness?.close(); });
 
 const displayed = (page: Page) => page.evaluate(() => ({
   rows: [...document.querySelectorAll<HTMLElement>('[data-library-row]')].map(row => ({ id: row.dataset.libraryRow, text: row.innerText })),
-  count: document.querySelector('h1 .count')?.textContent,
-  pagination: document.querySelector('.pagination')?.textContent,
+  count: document.querySelector('.research-pagination > span')?.textContent,
+  pagination: document.querySelector('.research-pagination')?.textContent,
 }));
 async function backgroundTick(page: Page, state: { completed: number }) {
   const previous = state.completed;
@@ -48,7 +48,7 @@ test('Alex LRR-01/04/05: 817x863 controls stay fixed while member/order/content/
     state.failed = false; await backgroundTick(page, state);
     await page.getByRole('button', { name: '更新清单', exact: true }).evaluate(button => button.click());
     await page.locator('[data-library-row="5001"]').waitFor();
-    await expect(page.locator('h1 .count')).toHaveText('119');
+    await expect(page.locator('.research-pagination > span')).toContainText('共 119 项');
     assert.equal(await page.evaluate(() => scrollY), 0);
     assert.equal(await page.getByRole('button', { name: '更新清单', exact: true }).count(), 0);
     await page.screenshot({ path: '.artifacts/alex-library-stable-817-applied.png' });
@@ -61,6 +61,8 @@ test('Alex LRR-02/03/04: detail return retains displayed page and pending; apply
   const { context, page, state } = await harness.fixture(390, { clock: true });
   try {
     await page.getByLabel('筛选国家', { exact: true }).selectOption('ar');
+    await expect.poll(() => state.calls.some(value => new URLSearchParams(value).get('country') === 'ar')).toBe(true);
+    await page.waitForTimeout(100);
     await page.getByRole('button', { name: '下一页', exact: true }).click();
     await page.locator('[data-library-row="21"]').waitFor();
     const row = page.locator('[data-library-row="27"]');
@@ -114,15 +116,66 @@ test('Alex LRR-02/04: shrinking total never moves a displayed last page before c
     state.failed = false;
     await page.getByRole('button', { name: '更新清单', exact: true }).evaluate(button => button.click());
     await page.locator('[data-library-row="1"]').waitFor();
-    await expect(page.locator('h1 .count')).toHaveText('20');
+    await expect(page.locator('.research-pagination > span')).toContainText('共 20 项');
     assert.equal(await page.getByRole('button', { name: '上一页', exact: true }).isDisabled(), true);
     const settled = state.calls.length;
     await page.waitForTimeout(100); assert.equal(state.calls.length, settled, 'invalid page recovery must not loop');
     state.rows = [];
     await page.getByRole('button', { name: '刷新当前数据', exact: true }).evaluate(button => button.click());
-    await expect(page.locator('h1 .count')).toHaveText('0');
+    await expect(page.locator('.research-pagination > span')).toContainText('共 0 项');
     assert.equal(await page.locator('[data-library-row]').count(), 0);
     assert.equal(await page.getByRole('button', { name: '更新清单', exact: true }).count(), 0);
     assert.deepEqual(state.pageErrors, []);
   } finally { release?.(); await context.close(); }
+});
+
+test('Alex RWP ordinary expiry retains displayed rows and performs no silent replacement; explicit refresh obtains a fresh token', async () => {
+  const { context, page, state } = await harness.fixture(817, { height:863, clock:true });
+  try {
+    const original = await displayed(page);
+    state.expired = true;
+    await backgroundTick(page, state);
+    await page.getByRole('alert').filter({hasText:'Alex synthetic expired snapshot'}).waitFor();
+    assert.deepEqual(await displayed(page), original);
+    const boundary = state.calls.length;
+    await backgroundTick(page, state);
+    assert.deepEqual(await displayed(page), original);
+    assert.ok(state.calls.slice(boundary).every(value => new URLSearchParams(value).has('snapshot')));
+    const applyAt = state.calls.length;
+    state.rows = [{...alexApp(8001),country:'ar'}, ...state.rows];
+    await page.getByRole('button', {name:'更新清单',exact:true}).click();
+    await page.locator('[data-library-row="8001"]').waitFor();
+    assert.ok(state.calls.slice(applyAt).some(value => !new URLSearchParams(value).has('snapshot')));
+    assert.deepEqual(state.pageErrors, []);
+  } finally { await context.close(); }
+});
+
+test('Alex RWP visibility revocation clears displayed and other query caches, comparison selection and silent reloads', async () => {
+  const { context, page, state } = await harness.fixture(817, { height:863, clock:true });
+  try {
+    await page.locator('[data-library-row="1"] input').check();
+    await page.locator('[data-library-row="2"] input').check();
+    await page.getByLabel('筛选国家', {exact:true}).selectOption('ar');
+    await expect.poll(() => state.calls.some(value => new URLSearchParams(value).get('country') === 'ar')).toBe(true);
+    await page.waitForTimeout(100);
+    state.rows = state.rows.filter(row => row.id !== 1);
+    state.revoked = true;
+    await backgroundTick(page, state);
+    await expect(page.locator('[data-library-row]')).toHaveCount(0);
+    assert.equal(await page.getByRole('button', {name:'开始对比',exact:true}).count(), 0);
+    const callsAtRevoke = state.calls.length;
+    await page.clock.fastForward(30000);
+    await page.waitForTimeout(80);
+    assert.equal(state.calls.length, callsAtRevoke, 'revoked cache must not auto-reload a fresh query');
+    await page.getByLabel('筛选国家', {exact:true}).selectOption('');
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('[data-library-row="1"]').count(), 0, 'the formerly cached unfiltered query cannot restore revoked rows');
+    const applyAt = state.calls.length;
+    state.revoked = false;
+    await page.getByRole('button', {name:'更新清单',exact:true}).click();
+    await page.locator('[data-library-row="2"]').waitFor();
+    assert.equal(await page.locator('[data-library-row="1"]').count(), 0);
+    assert.ok(state.calls.slice(applyAt).some(value => !new URLSearchParams(value).has('snapshot')));
+    assert.deepEqual(state.pageErrors, []);
+  } finally { await context.close(); }
 });

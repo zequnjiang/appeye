@@ -13,13 +13,14 @@ test('Alex LRR supersedes SR-01: two real 15-second polls stage content without 
     await table.evaluate(node => { (node as HTMLElement & { alexIdentity: string }).alexIdentity = 'stable'; });
     await page.getByLabel('搜索应用', { exact: true }).focus();
     const baseline = state.calls.length;
+    const originalRows = await page.locator('[data-library-row]').allTextContents();
     state.rows[0].title = 'Pending first poll';
     await page.getByRole('button', { name: '更新清单', exact: true }).waitFor({ timeout: 18000 });
     assert.equal(await page.getByText('Pending first poll', { exact: true }).count(), 0);
     state.rows[0].title = 'Pending second poll';
     await page.waitForTimeout(15500);
     assert.equal(await page.getByText('Pending second poll', { exact: true }).count(), 0);
-    assert.equal(await page.getByText('Loan Marker 1', { exact: true }).count(), 1);
+    assert.deepEqual(await page.locator('[data-library-row]').allTextContents(), originalRows);
     assert.ok(state.calls.length >= baseline + 2);
     assert.equal(await table.evaluate(node => (node as HTMLElement & { alexIdentity: string }).alexIdentity), 'stable');
     assert.equal(await page.getByRole('button', { name: '下一页', exact: true }).count(), 1);
@@ -45,9 +46,10 @@ test('Alex SR-02/03/04: desktop and 390px detail return restores cached query, p
     let release: (() => void) | undefined;
     try {
       await page.getByLabel('筛选国家', { exact: true }).selectOption('ar');
-      await page.getByLabel('筛选商店', { exact: true }).selectOption('google-play');
-      await page.getByLabel('筛选信贷分类', { exact: true }).selectOption('confirmed');
+      await page.getByLabel('应用商店', { exact: true }).selectOption('google-play');
+      await page.getByLabel('信贷范围', { exact: true }).selectOption('all');
       await page.getByLabel('搜索应用', { exact: true }).fill('Loan Marker');
+      await page.getByRole('button', {name: '搜索', exact:true}).click();
       await page.waitForTimeout(300);
       await page.getByRole('button', { name: '下一页', exact: true }).click();
       await page.locator('[data-library-row="21"]').waitFor();
@@ -61,8 +63,8 @@ test('Alex SR-02/03/04: desktop and 390px detail return restores cached query, p
       await page.getByRole('button', { name: '返回应用库', exact: true }).click();
       await row.waitFor();
       assert.equal(await page.getByLabel('筛选国家', { exact: true }).inputValue(), 'ar');
-      assert.equal(await page.getByLabel('筛选商店', { exact: true }).inputValue(), 'google-play');
-      assert.equal(await page.getByLabel('筛选信贷分类', { exact: true }).inputValue(), 'confirmed');
+      assert.equal(await page.getByLabel('应用商店', { exact: true }).inputValue(), 'google-play');
+      assert.equal(await page.getByLabel('信贷范围', { exact: true }).inputValue(), 'all');
       assert.equal(await page.getByLabel('搜索应用', { exact: true }).inputValue(), 'Loan Marker');
       assert.equal(await page.locator('[data-library-row]').first().getAttribute('data-library-row'), '21');
       const returned = await row.boundingBox();

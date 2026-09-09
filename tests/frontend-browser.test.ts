@@ -49,9 +49,10 @@ function app(id: number, country = 'ar') {
     releasedAt: null,
   };
 }
-async function fixture(mobile = false, clock = false) {
+async function fixture(mobile = false, clock = false, timezoneId?: string) {
   const context = await browser.newContext({
     viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 },
+    timezoneId,
   });
   const page = await context.newPage();
   if (clock) await page.clock.install();
@@ -61,11 +62,20 @@ async function fixture(mobile = false, clock = false) {
     failed: false,
     delay: null as Promise<void> | null,
   };
+  const snapshots = new Map<string, ReturnType<typeof app>[]>();
+  let sequence = 0;
   await page.route('**/api/**', async (route) => {
     const u = new URL(route.request().url());
     let body: any;
     if (u.pathname === '/api/auth/session')
-      body = { authenticated: true, configured: true, dataset: 'demo' };
+      body = {
+        authenticated: true,
+        configured: true,
+        dataset: 'demo',
+        user: { id: 0, name: 'Platform QA', email: null, role: 'platform', workspaceId: null },
+        workspaces: [],
+        authorizationVersion: 'v1',
+      };
     else if (u.pathname === '/api/countries')
       body = {
         countries: ['ar', 'th'].map((code) => ({
@@ -94,7 +104,18 @@ async function fixture(mobile = false, clock = false) {
         recentJobs: [],
         limitations: [],
       };
-    else if (u.pathname === '/api/apps') {
+    else if (u.pathname === '/api/market/activity')
+      body = {
+        date: '2026-09-09',
+        counts: { firstSeen: 0, storeRelease: 0, observedUpdate: 0 },
+        eventCounts: { firstSeen: 0, storeRelease: 0, observedUpdate: 0 },
+        countries: [],
+        featuredEvents: [],
+        events: [],
+        total: 0,
+        uniqueApps: 0,
+      };
+    else if (u.pathname === '/api/market/apps') {
       state.calls.push(u.search);
       if (state.delay) await state.delay;
       if (state.failed) {
@@ -103,14 +124,39 @@ async function fixture(mobile = false, clock = false) {
           .catch(() => {});
         return;
       }
-      const rows = state.rows.filter(
+      const live = state.rows.filter(
         (r) =>
           (!u.searchParams.get('country') || r.country === u.searchParams.get('country')) &&
           (!u.searchParams.get('q') || r.title.includes(u.searchParams.get('q')!)),
       );
-      const offset = Number(u.searchParams.get('offset') || 0),
-        limit = Number(u.searchParams.get('limit') || 20);
-      body = { apps: rows.slice(offset, offset + limit), total: rows.length };
+      let snapshot = u.searchParams.get('snapshot') || '';
+      if (u.searchParams.get('probe'))
+        body = {
+          changed: JSON.stringify(live) !== JSON.stringify(snapshots.get(snapshot)),
+          revision: String(sequence),
+        };
+      else {
+        if (!snapshot) {
+          snapshot = `query-${++sequence}`;
+          snapshots.set(snapshot, structuredClone(live));
+        }
+        const rows = snapshots.get(snapshot)!;
+        const limit = Number(u.searchParams.get('limit') || 20);
+        const offset = Math.min(
+          Number(u.searchParams.get('offset') || 0),
+          Math.max(0, Math.floor((rows.length - 1) / limit) * limit),
+        );
+        body = {
+          apps: rows.slice(offset, offset + limit),
+          total: rows.length,
+          offset,
+          limit,
+          snapshot,
+          revision: String(sequence),
+          createdAt: '2026-09-09T00:00:00Z',
+          expiresAt: '2026-09-09T12:00:00Z',
+        };
+      }
     } else if (/^\/api\/apps\/\d+$/.test(u.pathname))
       body = {
         app: app(Number(u.pathname.split('/').at(-1))),
@@ -152,6 +198,7 @@ async function fixture(mobile = false, clock = false) {
     await route.fulfill({ json: body }).catch(() => {});
   });
   await page.goto(base);
+  if (mobile) await page.getByRole('button', { name: '切换导航', exact: true }).click();
   await page.getByRole('navigation').getByRole('button', { name: '应用库', exact: true }).click();
   await page.locator('[data-library-row]').first().waitFor();
   return { context, page, state };
@@ -202,7 +249,8 @@ test('frontend: detail return preserves filters, non-first page, cached rows, re
     try {
       await page.getByLabel('筛选国家', { exact: true }).selectOption('ar');
       await page.getByLabel('搜索应用', { exact: true }).fill('Loan');
-      await page.waitForTimeout(350);
+      await page.getByRole('button', { name: '搜索', exact: true }).click();
+      await page.waitForTimeout(100);
       await page.getByRole('button', { name: '下一页', exact: true }).click();
       await page.locator('[data-library-row="21"]').waitFor();
       await page.locator('[data-library-row="27"]').scrollIntoViewIfNeeded();
@@ -294,7 +342,7 @@ test('frontend: removal uses a surviving neighbor and a reduced last page return
     await page.getByRole('button', { name: '刷新当前数据' }).evaluate((b) => b.click());
     await page.locator('[data-library-row]').first().waitFor();
     await page.waitForFunction(() => document.querySelectorAll('[data-library-row]').length === 5);
-    assert.equal(new URLSearchParams(state.calls.at(-1)).get('offset'), '0');
+    assert.match(await page.locator('.research-pagination').innerText(), /1–5/);
     state.rows = [];
     await page.getByRole('button', { name: '刷新当前数据' }).evaluate((b) => b.click());
     await page.locator('[data-library-row]').first().waitFor({ state: 'detached' });
@@ -506,6 +554,7 @@ test('frontend: discovery diagnostics submit reads only, show mixed source evide
           await route.fulfill({ json: { app: { id: 77 } } });
         } else await route.fallback();
       });
+      if (mobile) await page.getByRole('button', { name: '切换导航', exact: true }).click();
       await page
         .getByRole('navigation')
         .getByRole('button', { name: '发现诊断', exact: true })
@@ -660,6 +709,395 @@ test('frontend #25: detection, pending notices and failures never move the 817px
     await page.getByRole('button', { name: '更新清单', exact: true }).evaluate((b) => b.click());
     await page.locator('[data-library-row="9000"]').waitFor();
     assert.equal(await page.evaluate(() => scrollY), 0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal market: pages keep the original server snapshot despite inserted rows until an explicit replacement', async () => {
+  const { context, page, state } = await fixture(false, true);
+  try {
+    const initial = new URLSearchParams(state.calls[0]);
+    assert.equal(initial.get('sort'), 'minInstalls');
+    assert.equal(initial.get('direction'), 'desc');
+    assert.equal(initial.get('loanScope'), 'cash-priority');
+    state.rows.unshift(app(7000));
+    await page.getByRole('button', { name: '下一页', exact: true }).click();
+    await page.locator('[data-library-row="21"]').waitFor();
+    assert.equal(new URLSearchParams(state.calls.at(-1)).get('snapshot'), 'query-1');
+    await page.clock.fastForward(15000);
+    await page.getByText('有新数据，当前清单保持不变。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '下一页', exact: true }).click();
+    await page.locator('[data-library-row="41"]').waitFor();
+    assert.equal(new URLSearchParams(state.calls.at(-1)).get('snapshot'), 'query-1');
+    await page.getByRole('button', { name: '更新清单', exact: true }).click();
+    await page.locator('[data-library-row="40"]').waitFor();
+    assert.equal(new URLSearchParams(state.calls.at(-1)).has('snapshot'), false);
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal detail: real screenshot keyboard loop restores trigger focus; permission summaries stay compact and unsafe links are not actionable', async () => {
+  const { context, page } = await fixture();
+  try {
+    await page.route('**/fixture-shot.svg', (r) =>
+      r.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="140"><rect width="80" height="140" fill="#089d94"/></svg>',
+      }),
+    );
+    await page.route('**/api/apps/1', (r) =>
+      r.fulfill({
+        json: {
+          app: {
+            ...app(1),
+            developerWebsite: 'javascript:alert(1)',
+            privacyPolicy: 'https://example.test/privacy',
+            screenshots: [`${base}fixture-shot.svg`, `${base}fixture-shot.svg?second=1`],
+          },
+          snapshots: [],
+          changes: [],
+          reviews: [],
+          rawDetail: {},
+          enrichments: [
+            {
+              kind: 'permissions',
+              status: 'available',
+              lastSuccessAt: '2026-01-01T00:00:00Z',
+              data: Array.from({ length: 9 }, (_, i) => ({ permission: `Permission ${i + 1}` })),
+            },
+          ],
+        },
+      }),
+    );
+    await page.locator('[data-library-row="1"] .app-cell').click();
+    const trigger = page.getByRole('button', { name: 'Loan 1 商店截图 1', exact: true });
+    await trigger.focus();
+    await trigger.press('Enter');
+    await page.getByRole('dialog', { name: '商店截图 1 / 2' }).waitFor();
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('dialog', { name: '商店截图 2 / 2' }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await page.waitForTimeout(50);
+    assert.equal(await trigger.evaluate((el) => document.activeElement === el), true);
+    assert.equal(await page.locator('a[href^="javascript:"]').count(), 0);
+    assert.match(
+      (await page
+        .getByRole('link', { name: 'fixture.loan.1 · Google Play', exact: true })
+        .getAttribute('href'))!,
+      /gl=ar/,
+    );
+    await page.getByRole('tab', { name: '权限与隐私', exact: true }).click();
+    assert.equal(await page.locator('.permission-list li').count(), 6);
+    await page.getByRole('button', { name: '展开全部 9 项权限', exact: true }).click();
+    assert.equal(await page.locator('.permission-list li').count(), 9);
+    await page.getByRole('button', { name: '收起权限', exact: true }).click();
+    assert.equal(await page.locator('.permission-list li').count(), 6);
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal CSV: export uses the displayed snapshot and full query, downloads full results without replacing the list', async () => {
+  const { context, page, state } = await fixture();
+  try {
+    const captured: string[] = [];
+    let expired = false;
+    let downloads = 0;
+    page.on('download', () => downloads++);
+    await page.route('**/api/market/apps.csv?*', (r) => {
+      captured.push(r.request().url());
+      if (expired) return r.fulfill({ status: 410, json: { error: 'Frozen export expired' } });
+      return r.fulfill({
+        contentType: 'text/csv;charset=utf-8',
+        body: 'id,title\r\n1,First frozen row\r\n60,Last frozen row\r\n',
+      });
+    });
+    const before = state.calls.length,
+      rows = await queryKey(page);
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: '导出当前清单 CSV', exact: true }).click();
+    const file = await downloaded;
+    const stream = await file.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+    assert.match(Buffer.concat(chunks).toString(), /60,Last frozen row/);
+    assert.equal(file.suggestedFilename(), 'appeye-market-snapshot.csv');
+    const params = new URL(captured[0]!).searchParams;
+    assert.equal(params.get('snapshot'), 'query-1');
+    assert.equal(params.get('sort'), 'minInstalls');
+    assert.equal(params.get('direction'), 'desc');
+    assert.equal(params.get('loanScope'), 'cash-priority');
+    assert.equal(state.calls.length, before);
+    assert.deepEqual(await queryKey(page), rows);
+    expired = true;
+    await page.getByRole('button', { name: '导出当前清单 CSV', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Frozen export expired' }).waitFor();
+    assert.equal(downloads, 1, '410 response must not be saved as CSV');
+    assert.deepEqual(await queryKey(page), rows);
+    assert.equal(
+      await page.getByRole('button', { name: '导出当前清单 CSV', exact: true }).isDisabled(),
+      true,
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal access: natural expiry retains a displayed page, but scope revocation clears all cached queries and compare selections until explicit reload', async () => {
+  const { context, page, state } = await fixture(false, true);
+  try {
+    let mode: 'normal' | 'expired' | 'revoked' = 'normal';
+    await page.route('**/api/market/apps?*', async (r) => {
+      const u = new URL(r.request().url());
+      if (u.searchParams.has('probe') && mode !== 'normal')
+        return r.fulfill({
+          status: 410,
+          json: {
+            error: mode === 'expired' ? 'Natural snapshot expiry' : 'Public scope revoked',
+            ...(mode === 'revoked' ? { code: 'SNAPSHOT_SCOPE_REVOKED' } : {}),
+          },
+        });
+      return r.fallback();
+    });
+    await page.getByLabel('筛选国家', { exact: true }).selectOption('ar');
+    await page.locator('[data-library-row="1"]').waitFor();
+    mode = 'expired';
+    await page.clock.fastForward(15000);
+    await page.getByRole('alert').filter({ hasText: 'Natural snapshot expiry' }).waitFor();
+    assert.equal(await page.locator('[data-library-row]').count(), 20);
+    assert.equal(
+      await page.getByRole('button', { name: '导出当前清单 CSV', exact: true }).isDisabled(),
+      true,
+    );
+    mode = 'normal';
+    await page.getByRole('button', { name: '更新清单', exact: true }).click();
+    await page.waitForFunction(
+      () => !document.body.textContent?.includes('Natural snapshot expiry'),
+    );
+    await page.getByRole('checkbox', { name: '对比 Loan 1', exact: true }).check();
+    mode = 'revoked';
+    await page.clock.fastForward(15000);
+    await page.locator('[data-library-row]').first().waitFor({ state: 'detached' });
+    assert.equal(await page.locator('.research-compare-tray').count(), 0);
+    const before = state.calls.length;
+    await page.clock.fastForward(45000);
+    await page.waitForTimeout(50);
+    assert.equal(await page.locator('[data-library-row]').count(), 0);
+    assert.equal(
+      state.calls.length,
+      before,
+      'revoke must not silently acquire a replacement query',
+    );
+    await page.getByLabel('筛选国家', { exact: true }).selectOption('');
+    await page.waitForTimeout(50);
+    assert.equal(
+      await page.locator('[data-library-row]').count(),
+      0,
+      'second old query must not replay revoked rows',
+    );
+    assert.equal(state.calls.length, before);
+    mode = 'normal';
+    state.rows = state.rows.filter((r) => r.id !== 1);
+    await page.getByRole('button', { name: '更新清单', exact: true }).click();
+    await page.locator('[data-library-row="2"]').waitFor();
+    assert.equal(await page.locator('[data-library-row="1"]').count(), 0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal detail: Mexico browser preserves a date-only release and renders complete timestamps in Beijing time', async () => {
+  const { context, page } = await fixture(false, false, 'America/Mexico_City');
+  try {
+    await page.route('**/api/apps/1', (r) =>
+      r.fulfill({
+        json: {
+          app: { ...app(1), releasedAt: '2026-09-07', storeUpdatedAt: '2026-09-07T01:30:00Z' },
+          snapshots: [],
+          changes: [],
+          reviews: [],
+          enrichments: [],
+          rawDetail: {},
+        },
+      }),
+    );
+    await page.locator('[data-library-row="1"] .app-cell').click();
+    const facts = page.locator('dl.facts');
+    assert.equal(
+      await facts
+        .locator('div')
+        .filter({ has: page.getByText('商店发布日期', { exact: true }) })
+        .locator('dd')
+        .innerText(),
+      '2026-09-07',
+    );
+    assert.equal(
+      await facts
+        .locator('div')
+        .filter({ has: page.getByText('商店更新时间', { exact: true }) })
+        .locator('dd')
+        .innerText(),
+      '2026/09/07 09:30',
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+async function customerFixture(page: Page, research: Record<string, unknown>) {
+  await page.route('**/api/auth/session', (r) =>
+    r.fulfill({
+      json: {
+        authenticated: true,
+        configured: true,
+        dataset: 'demo',
+        user: {
+          id: 9,
+          name: 'Research QA',
+          email: 'qa@example.test',
+          role: 'researcher',
+          workspaceId: 1,
+        },
+        workspaces: [{ id: 1, name: 'QA space', role: 'researcher' }],
+        authorizationVersion: 'v1',
+      },
+    }),
+  );
+  await page.route('**/api/research/state', (r) =>
+    r.fulfill({
+      json: {
+        workspace: { id: 1, name: 'QA space' },
+        groups: [],
+        favorites: [],
+        collections: [],
+        entries: [],
+        apps: [],
+        readStates: [],
+        requests: [],
+        ...research,
+      },
+    }),
+  );
+}
+
+test('formal detail: transient failure retains the selected event, but 404 removes its original text and active research dialog', async () => {
+  const { context, page } = await fixture(false, true);
+  try {
+    await customerFixture(page, {});
+    let mode: 'ok' | 'transient' | 'revoked' = 'ok';
+    const event = {
+      id: 'change-77',
+      type: 'observedUpdate',
+      appId: 1,
+      externalId: 'fixture.loan.1',
+      title: 'Loan 1',
+      country: 'ar',
+      store: 'google-play',
+      classification: 'confirmed',
+      eventAt: '2026-09-07T01:30:00Z',
+      observedAt: '2026-09-07T01:30:00Z',
+      releasedAt: null,
+      releasedAtPrecision: 'unknown',
+      snapshotId: 99,
+      sourceUrl: 'https://example.test/event',
+      versionChanged: false,
+      releaseNotes: 'Selected event source text',
+      changes: [
+        {
+          id: 77,
+          field: 'description',
+          oldValue: 'Original event before text',
+          newValue: 'Original event after text',
+        },
+      ],
+    };
+    await page.route('**/api/market/activity?*', (r) =>
+      r.fulfill({
+        json: {
+          date: '2026-09-09',
+          counts: { firstSeen: 0, storeRelease: 0, observedUpdate: 1 },
+          eventCounts: { firstSeen: 0, storeRelease: 0, observedUpdate: 1 },
+          countries: [],
+          featuredEvents: [event],
+          events: [event],
+          total: 1,
+          uniqueApps: 1,
+        },
+      }),
+    );
+    await page.route('**/api/apps/1', (r) =>
+      mode === 'ok'
+        ? r.fallback()
+        : r.fulfill({
+            status: mode === 'transient' ? 503 : 404,
+            json: { error: mode === 'transient' ? 'Transient detail failure' : 'No longer public' },
+          }),
+    );
+    await page.reload();
+    await page.getByRole('button', { name: '查看 Loan 1 观测更新', exact: true }).click();
+    await page.getByText('Original event before text', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '写备注', exact: true }).waitFor();
+    mode = 'transient';
+    await page.clock.fastForward(15000);
+    await page.getByRole('alert').filter({ hasText: 'Transient detail failure' }).waitFor();
+    assert.equal(await page.getByText('Original event before text', { exact: true }).count(), 1);
+    await page.getByRole('button', { name: '写备注', exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+    mode = 'revoked';
+    await page.clock.fastForward(15000);
+    await page.getByRole('alert').filter({ hasText: 'No longer public' }).waitFor();
+    assert.equal(await page.locator('.selected-event').count(), 0);
+    assert.equal(await page.locator('.research-detail-actions').count(), 0);
+    assert.equal(await page.getByRole('dialog').count(), 0);
+    assert.equal(await page.getByText('Original event before text', { exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '返回今日市场', exact: true }).count(), 1);
+  } finally {
+    await context.close();
+  }
+});
+
+test('formal research: delete sends the displayed entry revision and preserves the newer entry on conflict', async () => {
+  const { context, page } = await fixture();
+  try {
+    const entry = {
+      id: 4,
+      appId: 1,
+      kind: 'note',
+      text: 'Original private note',
+      revision: 2,
+      updatedAt: '2026-09-07T01:00:00Z',
+      appIdentity: { id: 1, title: 'Loan 1' },
+      appVisible: true,
+    };
+    await customerFixture(page, { entries: [entry], apps: [app(1)] });
+    const bodies: unknown[] = [];
+    await page.route('**/api/research/entries/4', (r) => {
+      assert.equal(r.request().method(), 'DELETE');
+      bodies.push(r.request().postDataJSON());
+      entry.revision = 3;
+      entry.text = 'Newer concurrent private note';
+      return r.fulfill({
+        status: 409,
+        json: { error: 'Entry changed; reload the current revision' },
+      });
+    });
+    await page.reload();
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: '研究空间', exact: true })
+      .click();
+    await page.getByText('Original private note', { exact: true }).waitFor();
+    await page.locator('.research-note').getByRole('button', { name: '删除', exact: true }).click();
+    await page
+      .getByRole('alert')
+      .filter({ hasText: 'Entry changed; reload the current revision' })
+      .waitFor();
+    await page.getByText('Newer concurrent private note', { exact: true }).waitFor();
+    assert.deepEqual(bodies, [{ revision: 2 }]);
+    assert.equal(await page.locator('.research-note').count(), 1);
   } finally {
     await context.close();
   }
