@@ -1,7 +1,6 @@
 import express, { type ErrorRequestHandler, type Request } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -17,6 +16,16 @@ import {
   recordKnownIdentity,
 } from './extended-discovery.js';
 import { earliestKnownDiscovery } from './manual-collection.js';
+import { createWorkspaceAuth, HttpError, type Actor, audit } from './workspace-auth.js';
+import { researchRouter, publicApp } from './workspace-research.js';
+import { workspaceRouter, platformRouter } from './workspace-admin.js';
+import {
+  queryMarket,
+  workspaceActivity,
+  category,
+  displayReleaseEvidence,
+  exportMarketCsv,
+} from './workspace-market.js';
 
 export const limitations = [
   '首次发现是本系统第一次观察到该应用的时间，不代表实际新上架；商店提供的发布日期单独保存。',
@@ -52,14 +61,6 @@ const filterSchema = pageSchema.extend({
   loanVerdict: z.enum(['strong', 'possible', 'insufficient']).optional(),
   q: z.string().max(200).optional(),
 });
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 export interface AppOptions {
   store: Store;
   password?: string;
@@ -94,39 +95,14 @@ export function createApp(options: AppOptions) {
   );
   app.use(express.json({ limit: '128kb' }));
   const password = options.password ?? '';
-  const secret = options.sessionSecret ?? randomBytes(32).toString('hex');
-  const sessions = new Map<string, number>();
   const dataset = options.demoMode ? 'demo' : 'live';
-  const sign = (value: string) => createHmac('sha256', secret).update(value).digest('hex');
-  const authenticated = (req: Request) => {
-    const value = req.headers.cookie
-      ?.split(';')
-      .map((x) => x.trim())
-      .find((x) => x.startsWith('appeye_session='))
-      ?.slice(15);
-    if (!value) return false;
-    const [id, signature] = value.split('.');
-    if (!id || !signature || signature.length !== 64) return false;
-    const expected = sign(id);
-    if (
-      !/^[a-f0-9]{64}$/.test(signature) ||
-      !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
-    )
-      return false;
-    const expires = sessions.get(id);
-    if (!expires || expires <= Date.now()) {
-      sessions.delete(id);
-      return false;
-    }
-    return true;
-  };
-  const cookieOptions = {
-    httpOnly: true,
-    sameSite: 'strict' as const,
-    secure: options.secureCookies ?? false,
-    path: '/',
-    maxAge: 12 * 3600000,
-  };
+  const auth = createWorkspaceAuth(
+    store,
+    password,
+    dataset,
+    options.secureCookies,
+    options.sessionSecret,
+  );
   const allowedOrigins =
     options.allowedOrigins ??
     (process.env.NODE_ENV === 'production'
@@ -145,45 +121,92 @@ export function createApp(options: AppOptions) {
     next();
   });
   app.get('/api/health', (_req, res) => res.json({ ok: true, dataset }));
-  app.get('/api/auth/session', (req, res) =>
-    res.json({ authenticated: authenticated(req), configured: !!password, dataset }),
-  );
-  app.post(
-    '/api/auth/login',
-    rateLimit({
-      windowMs: 15 * 60000,
-      limit: 15,
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-      message: { error: '登录尝试过多，请稍后再试' },
-    }),
-    (req, res) => {
-      if (!password)
-        throw new HttpError(503, '尚未设置 ADMIN_PASSWORD，请在 .env 中配置后重启服务');
-      const input = z.object({ password: z.string().max(1024) }).parse(req.body);
-      const digest = (value: string) => createHash('sha256').update(value).digest();
-      if (!timingSafeEqual(digest(input.password), digest(password)))
-        throw new HttpError(401, '密码不正确');
-      for (const [id, expires] of sessions) if (expires < Date.now()) sessions.delete(id);
-      const id = randomBytes(32).toString('hex');
-      sessions.set(id, Date.now() + cookieOptions.maxAge);
-      res.cookie('appeye_session', `${id}.${sign(id)}`, cookieOptions);
-      res.json({ authenticated: true, dataset });
-    },
-  );
-  app.use('/api', (req, _res, next) => {
-    if (!authenticated(req)) return next(new HttpError(401, '请先登录'));
+  app.get('/api/auth/session', (req, res) => res.json(auth.session(auth.current(req))));
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60000,
+    limit: 15,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: '登录尝试过多，请稍后再试' },
+  });
+  app.post('/api/auth/login', authLimiter, auth.login);
+  app.get('/api/auth/invitations/:token', (req, res) => {
+    const invitation = auth.invitation(String(req.params.token));
+    res.json({
+      invitation: {
+        email: invitation.email,
+        role: invitation.role,
+        workspaceName: invitation.workspace_name,
+        expiresAt: invitation.expires_at,
+      },
+    });
+  });
+  app.post('/api/auth/accept', authLimiter, auth.accept);
+  app.use('/api', (req, res, next) => {
+    const actor = auth.current(req);
+    if (!actor) return next(new HttpError(401, '请先登录'));
+    res.locals.actor = actor;
     next();
   });
   app.post('/api/auth/logout', (req, res) => {
-    const value = req.headers.cookie
-      ?.split(';')
-      .map((x) => x.trim())
-      .find((x) => x.startsWith('appeye_session='))
-      ?.slice(15);
-    if (value) sessions.delete(value.split('.')[0]!);
-    res.clearCookie('appeye_session', { ...cookieOptions, maxAge: undefined });
+    auth.logout(req);
+    res.clearCookie('appeye_session', { ...auth.cookieOptions, maxAge: undefined });
     res.json({ authenticated: false });
+  });
+  app.post('/api/auth/workspace', (req, res) => {
+    const actor = res.locals.actor as Actor,
+      input = z.object({ workspaceId: z.number().int().positive() }).strict().parse(req.body);
+    if (
+      actor.role === 'platform' ||
+      !auth.workspaces(actor.id).some((w) => w.id === input.workspaceId)
+    )
+      throw new HttpError(403, '不是该客户空间的有效成员');
+    auth.logout(req);
+    res.json(auth.issue(res, actor.id, input.workspaceId));
+  });
+  app.get('/api/market/apps', (req, res) =>
+    res.json(queryMarket(store, res.locals.actor as Actor, req.query)),
+  );
+  app.get('/api/market/apps.csv', (req, res) => {
+    const csv = exportMarketCsv(store, res.locals.actor as Actor, req.query);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="appeye-market-apps.csv"');
+    res.send(csv);
+  });
+  app.get('/api/market/activity', (req, res) => {
+    try {
+      res.json({ ...workspaceActivity(store, req.query), dataset });
+    } catch (error) {
+      if (error instanceof z.ZodError || error instanceof HttpError) throw error;
+      throw new HttpError(400, error instanceof Error ? error.message : '无效查询');
+    }
+  });
+  app.use('/api/research', researchRouter(store));
+  app.use('/api/workspaces', workspaceRouter(store));
+  app.use('/api/platform', platformRouter(store, options.demoMode));
+  // Legacy administrative endpoints also enforce the current principal. The only
+  // customer-readable legacy branches are countries and confirmed app evidence.
+  app.use('/api', (req, res, next) => {
+    const actor = res.locals.actor as Actor;
+    if (actor.role === 'platform') return next();
+    if (req.method === 'GET' && req.path === '/countries') return next();
+    const detail =
+      /^\/apps\/(\d+)(?:\/(?:discoveries|enrichments(?:\/[^/]+\/history)?|snapshots|changes|reviews))?$/.exec(
+        req.path,
+      );
+    if (req.method === 'GET' && detail) {
+      publicApp(store, Number(detail[1]));
+      return next();
+    }
+    return next(new HttpError(403, '此接口仅限平台运营'));
+  });
+  app.use('/api', (req, res, next) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method))
+      res.on('finish', () => {
+        if (res.statusCode < 400)
+          audit(store, res.locals.actor as Actor, `legacy.${req.method.toLowerCase()}`, req.path);
+      });
+    next();
   });
   app.get('/api/overview', (_req, res) => res.json({ ...store.overview(), dataset, limitations }));
   app.get('/api/market-activity', (req, res) => {
@@ -382,9 +405,17 @@ export function createApp(options: AppOptions) {
     return id;
   };
   app.get('/api/apps/:id', (req, res) => {
-    const id = appId(req);
+    const id = appId(req),
+      record = store.getApp(id)!,
+      release = displayReleaseEvidence(record);
     res.json({
-      app: store.getApp(id),
+      app: {
+        ...record,
+        ...category(store, id),
+        releasedAt: release.releasedAt,
+        releasedAtPrecision: release.releasedAtPrecision,
+        releasedAtRaw: release.releasedAtRaw,
+      },
       rawDetail: store.getRawDetail(id),
       enrichments: store.listEnrichments(id),
       discoveries: store.listDiscoveries(id, 20).discoveries,
@@ -588,7 +619,9 @@ export function createApp(options: AppOptions) {
     if (error instanceof z.ZodError)
       return void res.status(400).json({ error: '输入参数不合法', details: error.issues });
     if (error instanceof HttpError)
-      return void res.status(error.status).json({ error: error.message });
+      return void res
+        .status(error.status)
+        .json({ error: error.message, ...(error.code ? { code: error.code } : {}) });
     if (error instanceof SyntaxError && 'body' in error)
       return void res.status(400).json({ error: 'JSON 格式不正确' });
     console.error(error);

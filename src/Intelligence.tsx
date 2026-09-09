@@ -95,7 +95,7 @@ export function FieldTree({
         <span>{label}</span>
         <div>
           {safeLink(value) ? (
-            <a href={safeLink(value)} target="_blank" rel="noreferrer">
+            <a href={safeLink(value)} target="_blank" rel="noopener noreferrer">
               {String(value)}
             </a>
           ) : (
@@ -155,9 +155,11 @@ export function ClassificationNote({ app }: { app: MarketApp }) {
 
 export function LoanIntelligence({
   app,
+  canOperate = false,
   onChanged,
   onNotify,
 }: {
+  canOperate?: boolean;
   app: MarketApp;
   onChanged: () => void;
   onNotify: (s: string) => void;
@@ -165,6 +167,7 @@ export function LoanIntelligence({
   const analysis: LoanAnalysis | null | undefined = app.loanAnalysis;
   const [busy, setBusy] = useState(false);
   async function automatic() {
+    if (!canOperate) return;
     setBusy(true);
     try {
       await patch(`/apps/${app.id}`, { classificationMode: 'auto' });
@@ -184,7 +187,7 @@ export function LoanIntelligence({
             <span className="eyebrow">LOAN INTELLIGENCE</span>
             <h2>{analysis ? verdictLabels[analysis.verdict] : '等待文本分析'}</h2>
           </div>
-          {app.manualOverride && (
+          {canOperate && app.manualOverride && (
             <button disabled={busy} className="button secondary" onClick={() => void automatic()}>
               启用自动分类
             </button>
@@ -260,7 +263,7 @@ export function LoanIntelligence({
                         待核对字段：{d.missingFields.map((f) => fieldLabels[f] || f).join('、')}
                       </p>
                     )}
-                    <a href={safeLink(d.sourceUrl)} target="_blank" rel="noreferrer">
+                    <a href={safeLink(d.sourceUrl)} target="_blank" rel="noopener noreferrer">
                       {d.ruleId} · 查看政策原文 ↗
                     </a>
                   </div>
@@ -280,7 +283,7 @@ export function LoanIntelligence({
             ))}
             <div className="button-group">
               {analysis.sources.map((s) => (
-                <a key={s.url} href={safeLink(s.url)} target="_blank" rel="noreferrer">
+                <a key={s.url} href={safeLink(s.url)} target="_blank" rel="noopener noreferrer">
                   {s.title} ↗
                 </a>
               ))}
@@ -329,7 +332,7 @@ export function StoreInformation({ app, rawDetail }: { app: MarketApp; rawDetail
               <dt>{title}</dt>
               <dd>
                 {safeLink(app[k]) ? (
-                  <a href={safeLink(app[k])} target="_blank" rel="noreferrer">
+                  <a href={safeLink(app[k])} target="_blank" rel="noopener noreferrer">
                     {String(app[k])}
                   </a>
                 ) : app[k] == null ? (
@@ -357,18 +360,6 @@ export function StoreInformation({ app, rawDetail }: { app: MarketApp; rawDetail
           <p>当前描述未提取到明确实体角色。</p>
         )}
       </section>
-      {screenshots.length > 0 && (
-        <section className="panel padded">
-          <h2>商店截图</h2>
-          <div className="store-screenshots">
-            {screenshots.map((url, i) => (
-              <a href={url} target="_blank" rel="noreferrer" key={`${i}-${url}`}>
-                <img loading="lazy" src={url} alt={`应用商店截图 ${i + 1}`} />
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
       <section className="panel padded">
         <div className="panel-heading inline-heading">
           <div>
@@ -395,17 +386,39 @@ function History({ id, kind, version }: { id: number; kind: string; version: num
   );
 }
 
-function SupplementalSummary({ kind, data }: { kind: string; data: unknown }) {
-  if (!Array.isArray(data) || !data.length) return null;
-  if (kind === 'permissions')
-    return (
+function PermissionSummary({ data }: { data: unknown[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? data : data.slice(0, 6);
+  return (
+    <>
       <ul className="permission-list">
-        {data.map((entry, i) => {
-          const value = typeof entry === 'string' ? entry : entry?.permission || entry?.name;
-          return value ? <li key={i}>{String(value)}</li> : null;
+        {visible.map((entry, i) => {
+          const value =
+            typeof entry === 'string'
+              ? entry
+              : entry && typeof entry === 'object'
+                ? (entry as Record<string, unknown>).permission ||
+                  (entry as Record<string, unknown>).name ||
+                  JSON.stringify(entry)
+                : String(entry);
+          return <li key={i}>{String(value)}</li>;
         })}
       </ul>
-    );
+      {data.length > 6 && (
+        <button
+          className="button secondary"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? '收起权限' : `展开全部 ${data.length} 项权限`}
+        </button>
+      )}
+    </>
+  );
+}
+function SupplementalSummary({ kind, data }: { kind: string; data: unknown }) {
+  if (!Array.isArray(data) || !data.length) return null;
+  if (kind === 'permissions') return <PermissionSummary data={data} />;
   if (kind === 'versionHistory')
     return (
       <div className="version-history">
@@ -483,10 +496,12 @@ export function ObservationHistory({
 
 export function EnrichmentPanel({
   app,
+  canOperate = false,
   enrichments,
   onCollect,
   version,
 }: {
+  canOperate?: boolean;
   app: MarketApp;
   enrichments: Enrichment[];
   onCollect: () => void;
@@ -501,9 +516,11 @@ export function EnrichmentPanel({
             <h2>权限、隐私与补充资料</h2>
             <p>每类资料独立采集，保留来源、时间和历史。</p>
           </div>
-          <button className="button secondary" onClick={onCollect}>
-            采集补充资料
-          </button>
+          {canOperate && (
+            <button className="button secondary" onClick={onCollect}>
+              采集补充资料
+            </button>
+          )}
         </div>
         <p className="mini-note">
           权限来自商店公开声明，不代表用户已授予权限，也不是 APK Manifest

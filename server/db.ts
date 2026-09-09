@@ -326,6 +326,15 @@ export class Store {
     return this.getApp(id);
   }
   saveLoanAnalysis(appId: number, analysis: LoanAnalysis): AppRecord | undefined {
+    const config = this.one('SELECT * FROM research_rule_config WHERE id=1');
+    if (config)
+      analysis = {
+        ...analysis,
+        configurationVersion: config.version,
+        autoConfirmStrong: !!config.auto_confirm_strong,
+        classification:
+          analysis.verdict === 'strong' && config.auto_confirm_strong ? 'confirmed' : 'candidate',
+      };
     this.run(
       'UPDATE apps SET loan_analysis=?,classification=CASE WHEN manual_override=0 THEN ? ELSE classification END WHERE id=?',
       JSON.stringify(analysis),
@@ -342,8 +351,7 @@ export class Store {
       raw: this.getRawDetail(appId) ?? app.storeData,
       observedAt: observedAt ?? app.lastFetchedAt ?? app.firstSeenAt,
     });
-    this.saveLoanAnalysis(appId, analysis);
-    return analysis;
+    return this.saveLoanAnalysis(appId, analysis)!.loanAnalysis!;
   }
   backfillLoanAnalyses(force = false): number {
     const rows = this.all(`SELECT id FROM apps ${force ? '' : 'WHERE loan_analysis IS NULL'}`);

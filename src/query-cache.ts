@@ -160,6 +160,9 @@ export function createQueryCache(options: {
           if (current() && error?.name !== 'AbortError')
             entry.state = {
               ...entry.state,
+              ...([401, 403, 404].includes(error?.status)
+                ? { data: null, pendingData: null, hasPending: false }
+                : {}),
               error: error instanceof Error ? error.message : String(error),
             };
         })
