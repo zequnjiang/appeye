@@ -925,6 +925,55 @@ td strong {
 .library-app-copy {
   min-width: 0;
 }
+.store-app-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+.store-app-link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.store-app-link svg,
+.resource-external-link svg {
+  flex-shrink: 0;
+}
+.store-app-link:hover,
+.store-app-link:focus-visible {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.app-resource-links {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+  font-size: 13px;
+}
+.app-resource-link-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+.app-resource-link-row dt {
+  color: var(--muted);
+}
+.app-resource-link-row dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.resource-external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--teal);
+  text-underline-offset: 3px;
+}
 .app-icon {
   position: relative;
   display: inline-flex;

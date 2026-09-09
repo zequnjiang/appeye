@@ -2,6 +2,25 @@
 
 final result: passed
 
+## Latest scoped annotation update — #39 (2026-09-09)
+
+The user's two detail annotations and `reference/qa/detail-links/before.jpg` are the source truth. Scope is the existing independent mock detail page: make the application ID / store subtitle a source link and add website / privacy links in Basic Information. Previous #37 and #35 reviews below remain historical.
+
+- Matched state: TH / Google Play / Siam Credit 15 Demo, Basic Information, researcher identity. Before and after use the same 1240×964 CSS viewport, emitted as 1225×952 JPEG captures. Full same-input review: `reference/qa/detail-links/comparison.png` (before left, after right). Focused review: `reference/qa/detail-links/focused-comparison.png` (same order), covering title, introduction and inserted links. Both were viewed together before judgment.
+- Typography: existing family, sizes and hierarchy retained. The source subtitle gains a small external-link glyph; website and privacy use two compact 13px rows. At 390 CSS pixels long addresses wrap within the content column and the glyph remains visible.
+- Layout rhythm: heading, metadata, tabs and right-hand facts keep their existing positions. The two resource rows sit after the introduction; the screenshot section moves down only to accommodate that content. No new page or panel is introduced.
+- Tokens: existing navy, teal, muted labels and white surfaces retained. External links use the existing teal and a visible hover/focus underline; blank or invalid values use plain text.
+- Assets: existing Lucide external-link glyphs, without new raster artwork or replacement store assets. Mock screenshot behavior is unchanged.
+- Copy/content: “官网” and “隐私协议” read the current identity's fields. Adjacent text explicitly calls them demonstration links, not the actual website or legal text. Missing values show “未提供”; invalid values show “地址不可用”. Source copy now explains that fictional store IDs can lack a real listing.
+
+The actual 390×844 responsive observation has `innerWidth=390`, document scrollWidth 375px plus browser scrollbar, source-link bounds x=72–298.34 and resource-link bounds x=156–359. The saved `detail-390-top.jpg` was visually inspected and shows all three links without page overflow. An earlier viewport setup attempt still measured 1240px: it remains labeled invalid in `browser-evidence.json` and is preserved as `viewport-setup-desktop.jpg`, never counted as a responsive pass. Closing the agent-created external tabs and reacquiring the browser handle allowed the final responsive check. The temporary viewport override was reset afterward.
+
+The CEO operated IAB; Alex independently reviews these artifacts alongside engineering checks. Recorded actual clicks opened the TH Google Play, AR Apple, website and privacy URLs in separate tabs while retaining the originating detail; the TH list return retained country, store, default sort and page 1. TH19 missing and AR22 invalid fields expose no resource anchors. Google Play reports the fictional package was not found; Apple reports “Ocurrió un error” for its fictional ID. Those external availability results are separate from verified destination identity and new-tab navigation. Both sample website/privacy anchors opened Example Domain. This does not establish any real app's website, privacy text or market data.
+
+The final available error/warn console observation is empty. No actionable P0/P1/P2 visual mismatch remains; no visual fix iteration was necessary. The source/reference full and focused comparisons and 390px check are complete. This scoped check does not claim a fresh regression of all earlier prototype flows or a production integration.
+
+Latest scoped final result: passed.
+
 ## Latest scoped annotation update — #37 (2026-09-09)
 
 Source truth is the user's four library annotations, together with the actual pre-edit library capture `reference/qa/library-polish/before.png`. The preceding homepage review below remains historical evidence for #35; it is not used as a pixel reference for the library. This update changes only the default sort, icon slot and two date columns.

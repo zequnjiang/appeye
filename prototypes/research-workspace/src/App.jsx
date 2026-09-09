@@ -44,6 +44,7 @@ import {
   createFixtures,
   createPendingDemo,
   admitCandidate,
+  storeSource,
   DEMO_DAY,
   countries,
   eventLabels,
@@ -68,6 +69,7 @@ import {
 import {
   Flag,
   AppIcon,
+  AppExternalLink,
   CountryLabel,
   Tag,
   SourceNote,
@@ -1066,7 +1068,11 @@ export function App() {
                   </Back>
                   <PageHeading
                     title={currentApp.title}
-                    description={`${currentApp.externalId} · ${stores[currentApp.store]}`}
+                    description={
+                      <AppExternalLink url={storeSource(currentApp)} className="store-app-link">
+                        {currentApp.externalId} · {stores[currentApp.store]}
+                      </AppExternalLink>
+                    }
                   >
                     {workspace && (
                       <button
@@ -1134,6 +1140,23 @@ export function App() {
                         <section className="panel">
                           <h2>应用介绍</h2>
                           <p className="long-text">{currentApp.description}</p>
+                          <dl className="app-resource-links">
+                            <div className="app-resource-link-row">
+                              <dt>官网</dt>
+                              <dd>
+                                <AppExternalLink url={currentApp.websiteUrl} />
+                              </dd>
+                            </div>
+                            <div className="app-resource-link-row">
+                              <dt>隐私协议</dt>
+                              <dd>
+                                <AppExternalLink url={currentApp.privacyUrl} />
+                              </dd>
+                            </div>
+                          </dl>
+                          <p className="fine-print">
+                            示例链接，仅演示导航；不代表该应用实际官网或法律文本。
+                          </p>
                           <div className="actions">
                             <button
                               className="text-button"

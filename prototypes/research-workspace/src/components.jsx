@@ -11,7 +11,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { countries, stores, eventLabels } from './data';
-import { dateText, formatNumber } from './utils';
+import { dateText, formatNumber, safeExternalUrl } from './utils';
 export function AppIcon({ app }) {
   const [failedSource, setFailedSource] = useState(null);
   const source = app.iconUrl;
@@ -44,6 +44,18 @@ export function AppIcon({ app }) {
         />
       )}
     </span>
+  );
+}
+export function AppExternalLink({ url, children, className = 'resource-external-link' }) {
+  const href = safeExternalUrl(url);
+  const missing = url === null || url === undefined || (typeof url === 'string' && !url.trim());
+  return href ? (
+    <a className={className} href={href} target="_blank" rel="noopener noreferrer">
+      <span>{children || href}</span>
+      <ExternalLink size={14} aria-hidden="true" />
+    </a>
+  ) : (
+    <span className="muted">{missing ? '未提供' : '地址不可用'}</span>
   );
 }
 export function Flag({ code }) {
@@ -308,7 +320,10 @@ export function DemoSource({ app }) {
       <details>
         <summary>查看示例来源路径</summary>
         <code>{app.source}</code>
-        <p>虚构市场身份，用于展示来源追溯，不打开为真实商店资料。</p>
+        <p>
+          可通过标题链接在新标签打开当前国家的商店路径；此原型身份虚构，包名或 ID
+          可能没有对应条目。官网与隐私链接也仅为示例，不代表实际网站或法律文本。
+        </p>
       </details>
     </div>
   );

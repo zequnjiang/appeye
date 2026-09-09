@@ -14,6 +14,8 @@ Default the application library to `minInstalls` descending, representing the pu
 
 ## Prototype implementation guidance
 
+Detail-link preferences (2026-09-09, issue #39): make the app ID/store subtitle open the matching country/store/app URL in a new tab. Show website and privacy links in basic information from `websiteUrl` and `privacyUrl`; missing values stay visibly missing, and new simulated identities must not inherit another app's links. Permit valid HTTP(S) links only, use `noopener noreferrer`, and preserve the current detail and origin context. Demo links may point to fictional entries; update source copy to explain that navigation is available but the store entry may not exist. Keep example website/privacy addresses explicitly marked as demo. See `../../docs/requirements/PROTOTYPE-DETAIL-LINKS.md`.
+
 Read `../../docs/requirements/RESEARCH-PROTOTYPE.md` for the complete accepted prototype requirements. Keep the Product Design runtime and hosting files intact. The CEO owns package/runtime/assets, `src/styles.css`, and visual QA; CTO owns other `src/` files and logic tests, PM owns requirements/final acceptance, and Alex owns independent QA. Coordinate before crossing file boundaries.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.

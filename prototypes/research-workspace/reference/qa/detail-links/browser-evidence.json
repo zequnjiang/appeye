@@ -1,0 +1,203 @@
+[
+  {
+    "test": "th15-links",
+    "data": {
+      "body": "官网https://example.com/#demo-website隐私协议https://example.com/#demo-privacy",
+      "heading": "Siam Credit 15 Demo",
+      "links": [
+        {
+          "href": "https://play.google.com/store/apps/details?id=com.th.creditdemo15&gl=th",
+          "rel": "noopener noreferrer",
+          "target": "_blank",
+          "text": "com.th.creditdemo15 · Google Play"
+        },
+        {
+          "href": "https://example.com/#demo-website",
+          "rel": "noopener noreferrer",
+          "target": "_blank",
+          "text": "https://example.com/#demo-website"
+        },
+        {
+          "href": "https://example.com/#demo-privacy",
+          "rel": "noopener noreferrer",
+          "target": "_blank",
+          "text": "https://example.com/#demo-privacy"
+        }
+      ]
+    }
+  },
+  {
+    "test": "google-click-new-tab",
+    "target": "https://play.google.com/store/apps/details?id=com.th.creditdemo15&gl=th",
+    "tabId": "3",
+    "result": "- generic: 抱歉，在此服务器上找不到所请求的网址。\n- link \"Google Play\":\n  - /url: /store\n  - img \"Google Play\"\n- textbox\n- button \"搜索\"",
+    "original": {
+      "heading": "Siam Credit 15 Demo",
+      "tab": "基本信息",
+      "url": "http://127.0.0.1:4173/"
+    }
+  },
+  {
+    "test": "resource-links-new-tabs",
+    "tabs": [
+      {
+        "id": "4",
+        "providerTabId": "18f1ff90-b901-4f81-917f-f08ae996f541",
+        "title": "Example Domain",
+        "url": "https://example.com/#demo-website"
+      },
+      {
+        "id": "5",
+        "providerTabId": "430517f4-89f0-4087-9626-b32abbaf6456",
+        "title": "Example Domain",
+        "url": "https://example.com/#demo-privacy"
+      }
+    ],
+    "original": {
+      "heading": "Siam Credit 15 Demo",
+      "tab": "基本信息",
+      "url": "http://127.0.0.1:4173/"
+    }
+  },
+  {
+    "test": "after-external-click-return",
+    "data": {
+      "country": "th",
+      "page": "共 10 条 · 第 1 / 1 页",
+      "sort": "minInstalls",
+      "store": "google-play"
+    }
+  },
+  {
+    "test": "ar-apple-link",
+    "data": {
+      "link": "https://apps.apple.com/ar/app/id1100000501",
+      "text": "1100000501 · App Store"
+    }
+  },
+  {
+    "test": "apple-click-new-tab",
+    "tabs": [
+      {
+        "id": "6",
+        "providerTabId": "33910841-e8f2-4f3e-8b32-30885318df72",
+        "title": "New tab",
+        "url": "https://apps.apple.com/ar/app/id1100000501"
+      }
+    ],
+    "original": {
+      "heading": "Crédito Sur 02 Demo",
+      "url": "http://127.0.0.1:4173/"
+    }
+  },
+  {
+    "test": "apple-external-result",
+    "result": "- navigation:\n  - img \"App Store\":\n  - generic: Buscar\n  - searchbox \"Buscar\"\n  - list:\n    - button \"Hoy\":\n      - generic: Hoy\n    - button \"Juegos\":\n      - generic: Juegos\n    - button \"Apps\":\n      - generic: Apps\n    - button \"Arcade\":\n      - generic: Arcade\n  - text: Plataforma\n  - list:\n    - link \"iPhone\":\n      - /url: https://apps.apple.com/ar/iphone/today\n      - generic: iPhone\n    - link \"iPad\":\n      - /url: https://apps.apple.com/ar/ipad/today\n      - generic: iPad\n    - link \"Mac\":\n      - /url: https://apps.apple.com/ar/mac/discover\n      - generic: Mac\n    - link \"Watch\":\n      - /url: https://apps.apple.com/ar/watch/apps-and-games\n      - generic: Watch\n    - link \"TV\":\n      - /url: https://apps.apple.com/ar/tv/discover\n      - generic: TV\n- main:\n  - status:\n    - heading \"Ocurrió un error\" [level=1]\n- button \"Argentina (Español)\"\n- list:\n  - link \"Esta página está disponible en English (UK)\":\n    - /url: \"?l=en-GB\"\n    - text: English (UK)\n- paragraph:\n  - text: Copyright © 2026\n  - link \"Apple Inc.\":\n    - /url: https://www.apple.com/mx/\n  - text: Todos los derechos reservados.\n- list:\n  - link \"Términos del servicio de Internet\":\n    - /url: https://www.apple.com/legal/internet-services/\n  - link \"App Store y la privacidad\":\n    - /url: https://www.apple.com/legal/privacy/data/es-419/app-store/\n  - link \"Advertencia sobre cookies\":\n    - /url: https://www.apple.com/mx/legal/privacy/es-la/cookies/\n  - link \"Soporte\":\n    - /url: https://support.apple.com/es-lamr/billing"
+  },
+  {
+    "test": "missing-links-th19",
+    "data": {
+      "links": 0,
+      "text": "官网未提供隐私协议未提供"
+    }
+  },
+  {
+    "test": "invalid-links-ar22",
+    "data": {
+      "links": 0,
+      "text": "官网地址不可用隐私协议地址不可用"
+    }
+  },
+  {
+    "test": "narrow-390-links",
+    "data": {
+      "document": 1225,
+      "resources": [
+        {
+          "rect": {
+            "bottom": 500.578125,
+            "height": 17,
+            "left": 331,
+            "right": 577.3984375,
+            "top": 483.578125,
+            "width": 246.3984375,
+            "x": 331,
+            "y": 483.578125
+          },
+          "text": "https://example.com/#demo-website"
+        },
+        {
+          "rect": {
+            "bottom": 529.078125,
+            "height": 17,
+            "left": 331,
+            "right": 574.59375,
+            "top": 512.078125,
+            "width": 243.59375,
+            "x": 331,
+            "y": 512.078125
+          },
+          "text": "https://example.com/#demo-privacy"
+        }
+      ],
+      "store": {
+        "bottom": 192.3984375,
+        "height": 26.3984375,
+        "left": 247,
+        "right": 520.96875,
+        "top": 166,
+        "width": 273.96875,
+        "x": 247,
+        "y": 166
+      },
+      "width": 1240
+    },
+    "status": "invalid viewport setup; measured desktop width 1240, not a responsive pass"
+  },
+  {
+    "check": "narrow-390-final",
+    "status": "passed",
+    "evidence": {
+      "document": 375,
+      "height": 844,
+      "links": [
+        {
+          "rel": "noopener noreferrer",
+          "right": 298.34375,
+          "target": "_blank",
+          "text": "com.th.creditdemo15 · Google Play",
+          "url": "https://play.google.com/store/apps/details?id=com.th.creditdemo15&gl=th",
+          "width": 226.34375,
+          "x": 72
+        },
+        {
+          "rel": "noopener noreferrer",
+          "right": 359,
+          "target": "_blank",
+          "text": "https://example.com/#demo-website",
+          "url": "https://example.com/#demo-website",
+          "width": 203,
+          "x": 156
+        },
+        {
+          "rel": "noopener noreferrer",
+          "right": 359,
+          "target": "_blank",
+          "text": "https://example.com/#demo-privacy",
+          "url": "https://example.com/#demo-privacy",
+          "width": 203,
+          "x": 156
+        }
+      ],
+      "width": 390
+    },
+    "screenshot": "detail-390-top.jpg",
+    "note": "Fresh browser handle after closing agent-created external tabs; document fits within viewport; long links wrap."
+  },
+  {
+    "check": "final-console-observation",
+    "time": "2026-09-09T04:19:50.596Z",
+    "logs": [],
+    "scope": "Available error/warn entries at final browser check; not a packet capture or external-store availability assertion."
+  }
+]
