@@ -917,6 +917,39 @@ td strong {
   max-width: 290px;
   overflow-wrap: anywhere;
 }
+.library-app-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.library-app-copy {
+  min-width: 0;
+}
+.app-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #f0f4f8;
+  color: var(--muted);
+}
+.app-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.app-icon img.app-icon-atlas {
+  position: absolute;
+  width: 240px;
+  height: 160px;
+  max-width: none;
+}
 .is-followed {
   color: var(--teal);
 }

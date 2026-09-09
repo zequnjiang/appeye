@@ -17,3 +17,9 @@ Create ONE portrait app-store-style promotional screenshot asset for a FICTIONAL
 ## 图库图 2 生成提示
 
 Create one portrait 640x1120 app-store screenshot-style image for the FICTIONAL 资金桥 Demo app, used only in an Appeye prototype gallery. Date anchor 2026-09-08, do not display dates or currency amounts. Prominent small top label exactly “原型示例 · 非真实商店图”. Main title “每一步，都清晰可见”, subtitle “随时查看申请进度与所需资料”. Elegant cream white background, deep navy typography, teal highlights, geometric soft mint decorative paper shapes as raster illustration. Central polished flat lender-app status UI showing heading “申请进度” and a vertical progression: “填写资料 已完成”, “身份核对 已完成”, “资料审核 进行中”, “查看结果 待完成”. Footer small note “流程演示，不代表实际审批或放款”. Bottom brand “资金桥 Demo”. Gentle detailed document illustration at bottom behind interface, small clean icons. No actual bank/company/government logos, no guaranteed approval claims, no people, no phone bezel or OS chrome, no collage. Professional Chinese fintech screenshot image, readable crisp title and body. Match a sophisticated pale mint/teal/navy design language; asset is illustration/mock media not functioning form.
+
+## 应用库图标（#37，2026-09-09）
+
+`public/assets/app-icons-demo.png` 为内置 Image Gen 生成的本地演示素材，1536×1024 像素，6 列×4 行、每格256×256，无格间距。24 个独立抽象图标按已检查的均匀格位显示于40×40图标槽，保持方形比例，不使用 CSS 绘制品牌图形。原文件保留于 `/Users/ozawa/.codex/generated_images/01a07786-e44d-75d2-8071-0bcd79284be5/exec-87f59efe-db75-4b98-a637-b2e9f2be6455.png`。
+
+图标仅帮助评审列表识别布局，在虚构应用之间复用，不是采集所得、真实公司商标或唯一品牌证明。应用名称和市场身份仍为实际识别依据；新收录的无图示例保持缺失状态。

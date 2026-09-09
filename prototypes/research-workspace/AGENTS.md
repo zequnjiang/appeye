@@ -8,6 +8,12 @@ The product serves invitation-only customer spaces, sharing market facts while k
 
 Required additional interactions: sort the entire filtered application dataset before pagination; retain current lists until the user applies detected updates; preserve origin/filter/sort/page/scroll on detail return. App details include a thumbnail screenshot gallery with lightbox and compact permission rows with expand-all. Always label generated gallery media as demo material, never a real store capture. Keep missing/unsupported/error/success-empty states distinct, including App Store Android-permission unavailability.
 
+## Library preferences (2026-09-09, issue #37)
+
+Default the application library to `minInstalls` descending, representing the public cumulative install lower bound, with App Store/missing values last; preserve user-selected sorting and detail-return context. Show a local demo app icon beside each app name, with a clear missing/error fallback. The two library date columns are `releasedAt` first and `storeUpdatedAt` second, labeled store release and latest store update; do not substitute `firstSeenAt` or `lastFetchedAt`. Keep first discovery in app details and as an optional sort field. These user decisions supersede the earlier library default and date-column layout without changing production or the pending-update behavior. Read `../../docs/requirements/PROTOTYPE-LIBRARY-POLISH.md` for the four acceptance criteria.
+
+## Prototype implementation guidance
+
 Read `../../docs/requirements/RESEARCH-PROTOTYPE.md` for the complete accepted prototype requirements. Keep the Product Design runtime and hosting files intact. The CEO owns package/runtime/assets, `src/styles.css`, and visual QA; CTO owns other `src/` files and logic tests, PM owns requirements/final acceptance, and Alex owns independent QA. Coordinate before crossing file boundaries.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.

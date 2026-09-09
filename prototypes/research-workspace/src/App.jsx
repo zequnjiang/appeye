@@ -67,6 +67,7 @@ import {
 } from './utils';
 import {
   Flag,
+  AppIcon,
   CountryLabel,
   Tag,
   SourceNote,
@@ -115,7 +116,7 @@ const defaultLibrary = {
   installs: '',
   from: '',
   to: '',
-  sort: 'firstSeenAt',
+  sort: 'minInstalls',
   direction: 'desc',
   page: 1,
 };
@@ -978,8 +979,8 @@ export function App() {
                                   <th>市场 / 商店</th>
                                   <th>评分</th>
                                   <th>累计安装</th>
-                                  <th>首次发现</th>
-                                  <th>商店发布</th>
+                                  <th>商店发布时间</th>
+                                  <th>最近更新时间</th>
                                   <th />
                                 </tr>
                               </thead>
@@ -995,14 +996,19 @@ export function App() {
                                       />
                                     </td>
                                     <td>
-                                      <button
-                                        id={`app-${a.id}`}
-                                        className="app-title"
-                                        onClick={() => selectApp(a.id)}
-                                      >
-                                        {a.title}
-                                      </button>
-                                      <small>{a.developer}</small>
+                                      <div className="library-app-identity">
+                                        <AppIcon app={a} />
+                                        <div className="library-app-copy">
+                                          <button
+                                            id={`app-${a.id}`}
+                                            className="app-title"
+                                            onClick={() => selectApp(a.id)}
+                                          >
+                                            {a.title}
+                                          </button>
+                                          <small>{a.developer}</small>
+                                        </div>
+                                      </div>
                                     </td>
                                     <td>
                                       <CountryLabel code={a.country} />
@@ -1020,8 +1026,8 @@ export function App() {
                                         {a.store === 'google-play' ? '累计 · 非国别' : '不可视为 0'}
                                       </small>
                                     </td>
-                                    <td>{dateText(a.firstSeenAt)}</td>
                                     <td>{dateText(a.releasedAt)}</td>
+                                    <td>{dateText(a.storeUpdatedAt)}</td>
                                     <td>
                                       <button
                                         className={`icon-button ${workspace?.following.includes(a.id) ? 'is-followed' : ''}`}
