@@ -1,6 +1,6 @@
 # Appeye 信贷研究工作台：独立交互原型
 
-- 状态：**PM Ready，等待 CTO 实现/自检 → Alex 独立验证 → PM 验收。**
+- 状态：**PM 最终验收通过（2026-09-09）；RP-AC-01–10 均通过，仅限独立 mock 原型。等待 CEO 提交最终代码/报告、完成精确提交 CI 与 GitHub 关联后合并并关闭 #35。** 结论及限制见 [PM 验收报告](../reports/RESEARCH-PROTOTYPE-PM.md)。
 - 版本：1.2，2026-09-09（Asia/Shanghai）；补充原型浏览器限制下载时的导出路径，沿用 v1.1 的格式/内部导航澄清，不增加真实 SaaS 范围。固定示例日期仍为 2026-09-08。
 - GitHub：[需求 #35](https://github.com/zequnjiang/appeye/issues/35)；分支 `codex/research-prototype`。
 - 目录：`prototypes/research-workspace/`；用户选定视觉方案：[第 1 张](../../prototypes/research-workspace/reference/selected-home.png)。
