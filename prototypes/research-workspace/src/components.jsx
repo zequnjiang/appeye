@@ -7,10 +7,45 @@ import {
   ChevronRight,
   X,
   Info,
+  ImageOff,
   ExternalLink,
 } from 'lucide-react';
 import { countries, stores, eventLabels } from './data';
 import { dateText, formatNumber } from './utils';
+export function AppIcon({ app }) {
+  const [failedSource, setFailedSource] = useState(null);
+  const source = app.iconUrl;
+  const failed = Boolean(source && failedSource === source);
+  const missing = !source;
+  const atlas = Number.isInteger(app.iconIndex) && app.iconIndex >= 0 && app.iconIndex < 24;
+  const label = missing ? '暂无图标' : failed ? '图标加载失败' : '示例应用图标';
+  return (
+    <span
+      className={`app-icon${missing ? ' is-missing' : failed ? ' is-error' : atlas ? ' is-atlas' : ''}`}
+      role="img"
+      aria-label={`${label} · ${app.title}`}
+      title={`${label} · ${app.title}${app.iconNote ? ' · ' + app.iconNote : ''}`}
+    >
+      {missing || failed ? (
+        <ImageOff size={18} aria-hidden="true" />
+      ) : (
+        <img
+          className={atlas ? 'app-icon-atlas' : undefined}
+          src={source}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          style={
+            atlas
+              ? { left: -(app.iconIndex % 6) * 40, top: -Math.floor(app.iconIndex / 6) * 40 }
+              : undefined
+          }
+          onError={() => setFailedSource(source)}
+        />
+      )}
+    </span>
+  );
+}
 export function Flag({ code }) {
   return (
     <span

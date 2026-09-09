@@ -2,6 +2,25 @@
 
 final result: passed
 
+## Latest scoped annotation update — #37 (2026-09-09)
+
+Source truth is the user's four library annotations, together with the actual pre-edit library capture `reference/qa/library-polish/before.png`. The preceding homepage review below remains historical evidence for #35; it is not used as a pixel reference for the library. This update changes only the default sort, icon slot and two date columns.
+
+- Matched state: TH / Google Play / personal cash loans, cumulative installs descending, first page, researcher identity. Both before/after captures use the requested 1254×964 CSS viewport and are emitted by IAB as 1239×952 pixel images; they are compared at equal raster size without rescaling either side independently. The source capture already had the user's manually selected install sort; a fresh-session and reset test separately prove the new default.
+- Full same-input comparison: `reference/qa/library-polish/comparison.png` (before left, after right). Focused comparison: `reference/qa/library-polish/focused-comparison.png` (before above, after below). The focused crop deliberately covers sort, table headers and the first rows. The last date column remains reachable through the existing table's horizontal scroll, as in the user's reference.
+- Implementation: `reference/qa/library-polish/after-desktop.png`, `library-390.png`, and `icon-failed.png`. At 390 CSS pixels the page document is 375px plus browser scrollbar, table container 287px and scrollable table 990px; no page-level overflow. Icons are 40×40 CSS pixels. The saved narrow screenshot contains 11 TH/GP rows because that test explicitly applied one new mock identity; reset returns the initial fixture.
+- Typography: existing font family, weights, row text sizes, wrapping and heading hierarchy retained. Icon introduction leaves names and developers legible; full text remains in the horizontally scrollable table.
+- Layout rhythm: 40px icon with 12px gap fits the existing row; no new panels, table controls, row selection changes or page navigation changes. The before/after row density and header placement remain aligned.
+- Tokens: navy, teal, muted text, white surfaces and existing table borders remain unchanged; new icons use local raster colors and a subtle missing-image surface.
+- Image quality: the generated 1536×1024 atlas has exact 6×4 square cells, rendered at proportional 240×160 within the 40px crop. The actual screenshot shows distinct, crisp symbols with no adjacent-tile bleed. It is explicitly fictional, not store-collected. TH19 has a meaningful missing-image symbol; AR20 deliberately exercises local load failure without a broken image. A new identity has no inherited icon.
+- Copy/content: headers now read 商店发布时间 → 最近更新时间, bound to `releasedAt` → `storeUpdatedAt`. TH19 shows 2025-07-19 and 2026-08-21, while its detail retains first-seen 2026-08-19 and collected 2026-09-08. Google Play retains cumulative/non-country language; Apple stays 未公开.
+
+No actionable P0/P1/P2 visual mismatch was found in the matched comparison; no visual fix iteration was required. A pre-reload HMR session still held old fixture objects without icon fields; the final comparisons and functional tests use fresh fixtures, not that intermediate development state. The initial narrow test retained its search after IAB `fill('')`; actual keyboard clearing produced the archived normal-icon screenshot. These are recorded as test setup observations, not silently relabeled product failures or passes.
+
+Actual browser facts are in `reference/qa/library-polish/browser-evidence.json`: fresh/reset default, default first/last pages, optional first-seen sort, score page 3 detail return with unchanged IDs, pending list retention, explicit application/new missing-icon identity, TH19 date/detail, AR20 failure and narrow geometry. Final console error/warn entries since the implementation load are empty; the intentionally missing raster is separately tested. The browser was operated by CEO; Alex independently reviews these artifacts alongside engineering checks. This scope does not re-test all existing prototype flows or production integrations.
+
+Latest scoped final result: passed.
+
 Reviewed 2026-09-09, Asia/Shanghai. This approves the independent product prototype, not a production migration.
 
 ## Comparison target

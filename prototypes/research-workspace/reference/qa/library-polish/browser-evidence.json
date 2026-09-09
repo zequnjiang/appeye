@@ -1,0 +1,790 @@
+[
+  {
+    "test": "default-library",
+    "data": {
+      "direction": "清单保持不变，检测结果需点击右上角更新才应用。排序应用名称开发者系统首次发现商店发布日期商店更新时间最近采集评分评分人数累计安装量降序 · 缺失值始终置后",
+      "headers": [
+        "",
+        "应用 / 开发者",
+        "市场 / 商店",
+        "评分",
+        "累计安装",
+        "商店发布时间",
+        "最近更新时间",
+        ""
+      ],
+      "rows": [
+        {
+          "cells": [
+            "",
+            "Crédito Sur 15 DemoCrédito Sur Technologies Ltd.",
+            "ARGoogle Play",
+            "4.213,932 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "示例应用图标 · Crédito Sur 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "ar-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Crédito Sur 05 DemoCrédito Sur Technologies Ltd.",
+            "ARGoogle Play",
+            "4.55,202 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-05-05",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Crédito Sur 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "ar-5",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Dana Aman 15 DemoDana Aman Technologies Ltd.",
+            "IDGoogle Play",
+            "4.113,830 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "示例应用图标 · Dana Aman 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "id-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Dana Aman 05 DemoDana Aman Technologies Ltd.",
+            "IDGoogle Play",
+            "4.45,100 人评分",
+            "1,000,000累计 · 非国别",
+            "2026-09-08",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Dana Aman 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "id-5",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Crédito Claro 15 DemoCrédito Claro Technologies Ltd.",
+            "MXGoogle Play",
+            "3.813,524 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "示例应用图标 · Crédito Claro 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "mx-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Crédito Claro 05 DemoCrédito Claro Technologies Ltd.",
+            "MXGoogle Play",
+            "4.14,794 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-05-05",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Crédito Claro 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "mx-5",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Cash Horizon 15 DemoCash Horizon Technologies Ltd.",
+            "PHGoogle Play",
+            "3.913,626 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "示例应用图标 · Cash Horizon 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "ph-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Cash Horizon 05 DemoCash Horizon Technologies Ltd.",
+            "PHGoogle Play",
+            "4.24,896 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-05-05",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Cash Horizon 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "ph-5",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Asaan Credit 15 DemoAsaan Credit Technologies Ltd.",
+            "PKGoogle Play",
+            "413,728 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "示例应用图标 · Asaan Credit 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "pk-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Asaan Credit 05 DemoAsaan Credit Technologies Ltd.",
+            "PKGoogle Play",
+            "4.34,998 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-05-05",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Asaan Credit 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "pk-5",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 15 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.713,422 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-15",
+          "imgLoaded": 1536
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 05 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "44,692 人评分",
+            "1,000,000累计 · 非国别",
+            "2026-09-08",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-5",
+          "imgLoaded": 1536
+        }
+      ],
+      "sort": "minInstalls"
+    }
+  },
+  {
+    "test": "filtered-th-google",
+    "data": {
+      "rows": [
+        {
+          "cells": [
+            "",
+            "Siam Credit 15 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.713,422 人评分",
+            "1,000,000累计 · 非国别",
+            "2025-03-15",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 15 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-15",
+          "image": {
+            "bottom": 508.1484375,
+            "height": 160,
+            "left": 243,
+            "right": 483,
+            "top": 348.1484375,
+            "width": 240,
+            "x": 243,
+            "y": 348.1484375
+          },
+          "rect": {
+            "bottom": 468.1484375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 428.1484375,
+            "width": 40,
+            "x": 323,
+            "y": 428.1484375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 05 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "44,692 人评分",
+            "1,000,000累计 · 非国别",
+            "2026-09-08",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 05 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-5",
+          "image": {
+            "bottom": 663.3984375,
+            "height": 160,
+            "left": 163,
+            "right": 403,
+            "top": 503.3984375,
+            "width": 240,
+            "x": 163,
+            "y": 503.3984375
+          },
+          "rect": {
+            "bottom": 543.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 503.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 503.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 09 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "4.48,184 人评分",
+            "500,000累计 · 非国别",
+            "2025-09-09",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 09 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-9",
+          "image": {
+            "bottom": 698.3984375,
+            "height": 160,
+            "left": 243,
+            "right": 483,
+            "top": 538.3984375,
+            "width": 240,
+            "x": 243,
+            "y": 538.3984375
+          },
+          "rect": {
+            "bottom": 618.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 578.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 578.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 13 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "4.811,676 人评分",
+            "100,000累计 · 非国别",
+            "2025-01-13",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 13 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-13",
+          "image": {
+            "bottom": 733.3984375,
+            "height": 160,
+            "left": 323,
+            "right": 563,
+            "top": 573.3984375,
+            "width": 240,
+            "x": 323,
+            "y": 573.3984375
+          },
+          "rect": {
+            "bottom": 693.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 653.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 653.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 03 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.82,946 人评分",
+            "100,000累计 · 非国别",
+            "2026-09-08",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 03 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-3",
+          "image": {
+            "bottom": 888.3984375,
+            "height": 160,
+            "left": 243,
+            "right": 483,
+            "top": 728.3984375,
+            "width": 240,
+            "x": 243,
+            "y": 728.3984375
+          },
+          "rect": {
+            "bottom": 768.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 728.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 728.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 17 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.915,168 人评分",
+            "50,000累计 · 非国别",
+            "2025-05-17",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 17 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-17",
+          "image": {
+            "bottom": 883.3984375,
+            "height": 160,
+            "left": 163,
+            "right": 403,
+            "top": 723.3984375,
+            "width": 240,
+            "x": 163,
+            "y": 723.3984375
+          },
+          "rect": {
+            "bottom": 843.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 803.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 803.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 07 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "4.26,438 人评分",
+            "50,000累计 · 非国别",
+            "2025-07-07",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 07 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-7",
+          "image": {
+            "bottom": 998.3984375,
+            "height": 160,
+            "left": 323,
+            "right": 563,
+            "top": 838.3984375,
+            "width": 240,
+            "x": 323,
+            "y": 838.3984375
+          },
+          "rect": {
+            "bottom": 918.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 878.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 878.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "资金桥 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.61,200 人评分",
+            "10,000累计 · 非国别",
+            "2026-09-08",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · 资金桥 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-1",
+          "image": {
+            "bottom": 1113.3984375,
+            "height": 160,
+            "left": 323,
+            "right": 563,
+            "top": 953.3984375,
+            "width": 240,
+            "x": 323,
+            "y": 953.3984375
+          },
+          "rect": {
+            "bottom": 993.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 953.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 953.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 11 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "4.69,930 人评分",
+            "10,000累计 · 非国别",
+            "2025-11-11",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "示例应用图标 · Siam Credit 11 Demo · 本地生成的演示图标，稳定复用素材，不代表真实商店图标",
+          "id": "th-11",
+          "image": {
+            "bottom": 1148.3984375,
+            "height": 160,
+            "left": 163,
+            "right": 403,
+            "top": 988.3984375,
+            "width": 240,
+            "x": 163,
+            "y": 988.3984375
+          },
+          "rect": {
+            "bottom": 1068.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 1028.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 1028.3984375
+          }
+        },
+        {
+          "cells": [
+            "",
+            "Siam Credit 19 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "4.116,914 人评分",
+            "0累计 · 非国别",
+            "2025-07-19",
+            "2026-08-21",
+            ""
+          ],
+          "icon": "暂无图标 · Siam Credit 19 Demo · 演示图标缺失",
+          "id": "th-19",
+          "rect": {
+            "bottom": 1143.3984375,
+            "height": 40,
+            "left": 323,
+            "right": 363,
+            "top": 1103.3984375,
+            "width": 40,
+            "x": 323,
+            "y": 1103.3984375
+          }
+        }
+      ],
+      "viewport": 1254,
+      "width": 1239
+    }
+  },
+  {
+    "test": "th19-detail-first-seen",
+    "snapshot": "- complementary:\n  - strong: appeye.\n  - paragraph: 信贷行业观察站\n  - generic: 产品原型 · 示例数据\n  - navigation \"主导航\":\n    - button \"今日市场\":\n      - generic: 今日市场\n    - button \"应用库\":\n      - generic: 应用库\n    - button \"我的关注\":\n      - generic: 我的关注\n    - button \"研究空间\":\n      - generic: 研究空间\n  - generic \"A 研究员\":\n    - generic: A\n    - generic: 研究员\n  - option \"北辰研究 · 研究员\" [selected]\n  - option \"北辰研究 · 客户管理员\"\n  - option \"北辰研究 · 只读成员\"\n  - option \"远山研究 · 研究员\"\n  - option \"远山研究 · 客户管理员\"\n  - option \"远山研究 · 只读成员\"\n  - option \"平台 · 平台运营\"\n  - paragraph:\n    - text: 专注全球信贷应用市场\n    - text: 更透明的行业观察\n- banner:\n  - text: 北京时间 2026年9月8日 星期二\n  - button \"演示检测 · 清单保持不变\":\n    - text: 演示检测 · 清单保持不变\n- main:\n  - button \"返回应用库\":\n    - text: 返回应用库\n  - heading \"Siam Credit 19 Demo\" [level=1]\n  - paragraph: com.th.creditdemo19 · Google Play\n  - button \"加入集合\"\n  - button \"加入对比\":\n    - text: 加入对比\n  - button \"关注应用\":\n    - text: 关注应用\n  - img \"泰国\"\n  - strong: TH\n  - generic: 泰国\n  - generic: 已确认信贷 · 个人现金贷\n  - generic: Siam Credit Technologies Ltd.\n  - generic: 示例数据，仅供产品演示\n  - button \"基本信息\"\n  - button \"信贷与主体\"\n  - button \"权限声明\"\n  - button \"变化记录\"\n  - button \"评价样本\"\n  - button \"研究笔记\"\n  - heading \"应用介绍\" [level=2]\n  - paragraph: Siam Credit 19 Demo 是用于产品原型演示的个人现金贷款服务。示例申请金额 5,000–50,000，当地货币；还款期限 90–180 天。展示身份验证、申请进度和还款计划。此处为虚构内容，不代表真实产品、贷款条件或牌照。\n  - button \"摘录到研究空间\":\n    - text: 摘录到研究空间\n  - button \"添加研究备注\"\n  - heading \"版本 1.3.0\" [level=3]\n  - paragraph: 优化申请流程与页面加载体验，改善还款计划展示，修复已知问题。\n  - complementary:\n    - heading \"当前观测\" [level=2]\n    - term: 评分\n    - definition: 4.1 / 5\n    - term: 评分人数\n    - definition: 16,914\n    - term: 公开累计安装\n    - definition: \"0\"\n    - term: 首次发现\n    - definition: 2026-08-19\n    - term: 商店发布日期\n    - definition: 2025-07-19\n    - term: 最近成功采集\n    - definition: 2026-09-08T09:36:00+08:00\n    - paragraph: Google Play 安装是公开累计指标，非国别下载。评分人数不等于可获取的文字评论数。\n  - heading \"商店截图\" [level=2]\n  - generic: 原型示例 · 非真实商店图\n  - heading \"该示例尚无商店截图\" [level=3]\n  - paragraph: 未取得图片不代表商店没有图片。\n  - strong: 来源与时间\n  - generic: 示例数据，仅供产品演示\n  - paragraph: Google Play · 请求市场 TH · 最近成功观测 2026-09-08 09:36\n  - paragraph: 本系统首次发现：2026-08-19；商店标注发布：2025-07-19。首次发现不等于新上架，发布日期不证明该国首次可用。\n  - generic \"查看示例来源路径 +\"\n  - generic: 示例数据，仅供产品演示\n  - generic: 公开市场资料与客户私有研究分开 · 演示身份切换并非真实登录"
+  },
+  {
+    "test": "firstSeen-still-sortable",
+    "sort": "firstSeenAt"
+  },
+  {
+    "test": "score-page3-return",
+    "before": {
+      "page": "共 120 条 · 第 3 / 10 页",
+      "rows": [
+        "ph-8",
+        "pk-7",
+        "th-10",
+        "ar-17",
+        "ar-4",
+        "id-18",
+        "id-5",
+        "mx-8",
+        "ph-7",
+        "pk-19",
+        "pk-6",
+        "th-9"
+      ],
+      "sort": "score",
+      "title": "Cash Horizon 08 Demo"
+    },
+    "after": {
+      "page": "共 120 条 · 第 3 / 10 页",
+      "rows": [
+        "ph-8",
+        "pk-7",
+        "th-10",
+        "ar-17",
+        "ar-4",
+        "id-18",
+        "id-5",
+        "mx-8",
+        "ph-7",
+        "pk-19",
+        "pk-6",
+        "th-9"
+      ],
+      "sort": "score"
+    }
+  },
+  {
+    "test": "ar20-failed-icon",
+    "snapshot": "- complementary:\n  - strong: appeye.\n  - paragraph: 信贷行业观察站\n  - generic: 产品原型 · 示例数据\n  - navigation \"主导航\":\n    - button \"今日市场\":\n      - generic: 今日市场\n    - button \"应用库\":\n      - generic: 应用库\n    - button \"我的关注\":\n      - generic: 我的关注\n    - button \"研究空间\":\n      - generic: 研究空间\n  - generic \"A 研究员\":\n    - generic: A\n    - generic: 研究员\n  - option \"北辰研究 · 研究员\" [selected]\n  - option \"北辰研究 · 客户管理员\"\n  - option \"北辰研究 · 只读成员\"\n  - option \"远山研究 · 研究员\"\n  - option \"远山研究 · 客户管理员\"\n  - option \"远山研究 · 只读成员\"\n  - option \"平台 · 平台运营\"\n  - paragraph:\n    - text: 专注全球信贷应用市场\n    - text: 更透明的行业观察\n- banner:\n  - text: 北京时间 2026年9月8日 星期二\n  - button \"演示检测 · 清单保持不变\":\n    - text: 演示检测 · 清单保持不变\n- main:\n  - heading \"应用库\" [level=1]\n  - paragraph: 检索、比较与持续观察各市场的信贷应用。\n  - button \"对比 0/4\" [disabled]:\n    - text: 对比 0/4\n  - button \"申请收录\":\n    - text: 申请收录\n  - textbox \"搜索应用\" [active]:\n    - /placeholder: 搜索应用、开发者或包名\n    - text: Crédito Sur 20\n  - combobox \"应用市场\":\n    - option \"全部市场\"\n    - option \"泰国\"\n    - option \"墨西哥\"\n    - option \"菲律宾\"\n    - option \"巴基斯坦\"\n    - option \"印尼\"\n    - option \"阿根廷\" [selected]\n  - combobox \"应用商店\":\n    - option \"全部商店\"\n    - option \"Google Play\"\n    - option \"App Store\" [selected]\n  - combobox \"信贷类型\":\n    - option \"个人现金贷\" [selected]\n    - option \"全部信贷类型\"\n    - option \"经营贷\"\n    - option \"房贷\"\n  - generic \"更多筛选\":\n    - text: 更多筛选\n  - generic: 清单保持不变，检测结果需点击右上角更新才应用。\n  - text: 排序\n  - combobox \"排序字段\":\n    - option \"应用名称\"\n    - option \"开发者\"\n    - option \"系统首次发现\"\n    - option \"商店发布日期\"\n    - option \"商店更新时间\"\n    - option \"最近采集\"\n    - option \"评分\" [selected]\n    - option \"评分人数\"\n    - option \"累计安装量\"\n  - button \"切换排序方向\":\n  - generic: 降序 · 缺失值始终置后\n  - generic: 1 个应用 · 个人现金贷\n  - table:\n    - rowgroup:\n      - row \"应用 / 开发者 市场 / 商店 评分 累计安装 商店发布时间 最近更新时间\":\n        - columnheader\n        - columnheader \"应用 / 开发者\"\n        - columnheader \"市场 / 商店\"\n        - columnheader \"评分\"\n        - columnheader \"累计安装\"\n        - columnheader \"商店发布时间\"\n        - columnheader \"最近更新时间\"\n        - columnheader\n    - rowgroup:\n      - row \"对比 Crédito Sur 20 Demo 图标加载失败 · Crédito Sur 20 Demo Crédito Sur 20 Demo Crédito Sur Technologies Ltd. 阿根廷 AR App Store 0 0 人评分 未公开 不可视为 0 2025-08-20 2026-08-21 关注 Crédito Sur 20 Demo\":\n        - cell \"对比 Crédito Sur 20 Demo\":\n          - checkbox \"对比 Crédito Sur 20 Demo\"\n        - cell \"图标加载失败 · Crédito Sur 20 Demo Crédito Sur 20 Demo Crédito Sur Technologies Ltd.\":\n          - img \"图标加载失败 · Crédito Sur 20 Demo\":\n          - button \"Crédito Sur 20 Demo\"\n          - generic: Crédito Sur Technologies Ltd.\n        - cell \"阿根廷 AR App Store\":\n          - img \"阿根廷\"\n          - strong: AR\n          - generic: App Store\n        - cell \"0 0 人评分\":\n          - text: \"0\"\n          - generic: 0 人评分\n        - cell \"未公开 不可视为 0\":\n          - text: 未公开\n          - generic: 不可视为 0\n        - cell \"2025-08-20\"\n        - cell \"2026-08-21\"\n        - cell \"关注 Crédito Sur 20 Demo\":\n          - button \"关注 Crédito Sur 20 Demo\":\n  - generic: 共 1 条 · 第 1 / 1 页\n  - button \"上一页\" [disabled]:\n  - button \"下一页\" [disabled]:\n  - generic: 示例数据，仅供产品演示\n  - generic: 公开市场资料与客户私有研究分开 · 演示身份切换并非真实登录"
+  },
+  {
+    "test": "reset-default",
+    "data": {
+      "page": "共 120 条 · 第 1 / 10 页",
+      "rows": [
+        "ar-15",
+        "ar-5",
+        "id-15",
+        "id-5",
+        "mx-15",
+        "mx-5",
+        "ph-15",
+        "ph-5",
+        "pk-15",
+        "pk-5",
+        "th-15",
+        "th-5"
+      ],
+      "sort": "minInstalls"
+    }
+  },
+  {
+    "test": "pending-retains-list",
+    "data": {
+      "header": "原型 · 示例数据北京时间  2026年9月8日  星期二有新数据 · 点击更新",
+      "rows": [
+        "ar-15",
+        "ar-5",
+        "id-15",
+        "id-5",
+        "mx-15",
+        "mx-5",
+        "ph-15",
+        "ph-5",
+        "pk-15",
+        "pk-5",
+        "th-15",
+        "th-5"
+      ]
+    }
+  },
+  {
+    "test": "applied-new-identity-no-old-icon",
+    "data": {
+      "rows": [
+        {
+          "cells": [
+            "",
+            "Siam Bridge 新发现 DemoSiam Credit Technologies Ltd.",
+            "THGoogle Play",
+            "3.61,200 人评分",
+            "10,000累计 · 非国别",
+            "2026-08-20",
+            "2026-09-08",
+            ""
+          ],
+          "icon": "暂无图标 · Siam Bridge 新发现 Demo · 新模拟身份尚未取得图标",
+          "id": "th-new-demo"
+        }
+      ],
+      "summary": "1 个应用 · 个人现金贷"
+    }
+  },
+  {
+    "test": "narrow-390",
+    "data": {
+      "documentWidth": 390,
+      "icon": {
+        "bottom": 646.296875,
+        "height": 40,
+        "left": 148,
+        "right": 188,
+        "top": 606.296875,
+        "width": 40,
+        "x": 148,
+        "y": 606.296875
+      },
+      "query": "新发现 Demo",
+      "summary": "1 个应用 · 个人现金贷",
+      "tableContainer": {
+        "bottom": 675.546875,
+        "height": 127,
+        "left": 72,
+        "right": 374,
+        "top": 548.546875,
+        "width": 302,
+        "x": 72,
+        "y": 548.546875
+      },
+      "tableScrollWidth": 990,
+      "viewport": 390
+    }
+  },
+  {
+    "test": "narrow-390-normal-icons",
+    "data": {
+      "documentWidth": 375,
+      "icon": {
+        "bottom": 668.296875,
+        "height": 40,
+        "left": 148,
+        "right": 188,
+        "top": 628.296875,
+        "width": 40,
+        "x": 148,
+        "y": 628.296875
+      },
+      "image": 1536,
+      "query": "",
+      "summary": "11 个应用 · 个人现金贷",
+      "tableContainer": {
+        "bottom": 1447.546875,
+        "height": 877,
+        "left": 72,
+        "right": 359,
+        "top": 570.546875,
+        "width": 287,
+        "x": 72,
+        "y": 570.546875
+      },
+      "tableScrollWidth": 990,
+      "viewport": 390
+    }
+  },
+  {
+    "test": "console-since-implementation-load",
+    "since": "2026-09-09T03:21:26.925Z",
+    "entries": []
+  },
+  {
+    "test": "default-last-page-null-installs",
+    "data": {
+      "page": "共 120 条 · 第 10 / 10 页",
+      "rows": [
+        {
+          "id": "pk-6",
+          "installs": "未公开不可视为 0",
+          "store": "PKApp Store"
+        },
+        {
+          "id": "pk-8",
+          "installs": "未公开不可视为 0",
+          "store": "PKApp Store"
+        },
+        {
+          "id": "th-10",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-12",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-14",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-16",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-18",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-2",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-20",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-4",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-6",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        },
+        {
+          "id": "th-8",
+          "installs": "未公开不可视为 0",
+          "store": "THApp Store"
+        }
+      ],
+      "sort": "minInstalls"
+    }
+  }
+]

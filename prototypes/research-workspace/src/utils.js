@@ -12,7 +12,7 @@ export const sortFields = [
 export const canEditResearch = (role) => role === 'admin' || role === 'researcher';
 export const canManageMembers = (role) => role === 'admin';
 export const canOperate = (role) => role === 'platform';
-export function visibleApps(apps, filters = {}, sort = 'firstSeenAt', direction = 'desc') {
+export function visibleApps(apps, filters = {}, sort = 'minInstalls', direction = 'desc') {
   const q = (filters.q || '').trim().toLowerCase();
   return apps
     .filter(

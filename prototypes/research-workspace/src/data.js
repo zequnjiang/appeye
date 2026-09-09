@@ -103,6 +103,19 @@ export function createFixtures() {
             ? `com.${country.code}.creditdemo${index + 1}`
             : `${1100000000 + ci * 100 + index}`,
         title,
+        iconUrl:
+          id === 'th-19'
+            ? null
+            : id === 'ar-20'
+              ? '/assets/intentional-missing-icon-demo.png'
+              : '/assets/app-icons-demo.png',
+        iconIndex: ['th-19', 'ar-20'].includes(id) ? null : (ci * 22 + index) % 24,
+        iconNote:
+          id === 'th-19'
+            ? '演示图标缺失'
+            : id === 'ar-20'
+              ? '故意使用本地不存在的示例图标路径，演示加载失败；非真实商店错误'
+              : '本地生成的演示图标，稳定复用素材，不代表真实商店图标',
         developer: `${prefixes[country.code]} Technologies Ltd.`,
         seller: `${prefixes[country.code]} Finance Company`,
         loanType: index < 20 ? 'personal' : index === 20 ? 'business' : 'mortgage',
@@ -438,6 +451,9 @@ export function createPendingDemo(apps, events) {
     version: '1.0.0',
     oldVersion: null,
     screenshots: [],
+    iconUrl: null,
+    iconIndex: null,
+    iconNote: '新模拟身份尚未取得图标',
     reviews: [],
   };
   added.source = storeSource(added);
@@ -495,6 +511,9 @@ export function admitCandidate(model, id) {
     classificationSource: 'manual',
     description: `${candidate.title} 是模拟核对的个人现金贷款应用。来源和条件均为原型示例，不代表真实采集。`,
     screenshots: [],
+    iconUrl: null,
+    iconIndex: null,
+    iconNote: '新模拟身份尚未取得图标',
     reviews: [],
     version: '1.0.0',
     oldVersion: null,
