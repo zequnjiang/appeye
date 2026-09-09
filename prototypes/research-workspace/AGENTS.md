@@ -8,7 +8,7 @@ The product serves invitation-only customer spaces, sharing market facts while k
 
 Required additional interactions: sort the entire filtered application dataset before pagination; retain current lists until the user applies detected updates; preserve origin/filter/sort/page/scroll on detail return. App details include a thumbnail screenshot gallery with lightbox and compact permission rows with expand-all. Always label generated gallery media as demo material, never a real store capture. Keep missing/unsupported/error/success-empty states distinct, including App Store Android-permission unavailability.
 
-Read `../../docs/requirements/RESEARCH-PROTOTYPE.md` for the complete accepted prototype requirements. Keep the Product Design runtime and hosting files intact. The CEO owns package/runtime/assets and visual QA; CTO owns `src/` and logic tests, PM owns requirements/final acceptance, and Alex owns independent QA. Coordinate before crossing file boundaries.
+Read `../../docs/requirements/RESEARCH-PROTOTYPE.md` for the complete accepted prototype requirements. Keep the Product Design runtime and hosting files intact. The CEO owns package/runtime/assets, `src/styles.css`, and visual QA; CTO owns other `src/` files and logic tests, PM owns requirements/final acceptance, and Alex owns independent QA. Coordinate before crossing file boundaries.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 

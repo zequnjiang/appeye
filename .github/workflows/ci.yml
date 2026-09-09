@@ -10,6 +10,23 @@ concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  prototype:
+    name: Research prototype
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    defaults:
+      run:
+        working-directory: prototypes/research-workspace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: prototypes/research-workspace/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 12
