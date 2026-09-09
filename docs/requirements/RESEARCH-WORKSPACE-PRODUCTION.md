@@ -1,6 +1,6 @@
 # 正式信贷研究工作台
 
-- 状态：**PM Ready，实施/独立验证中，尚未最终验收**；版本 1.1，2026-09-09，Asia/Shanghai。
+- 状态：**PM 最终验收通过，待 CEO 核对最终 HEAD 两条 CI 后合并/关闭**；版本 1.2，2026-09-09，Asia/Shanghai。见 [PM 验收](../reports/RESEARCH-WORKSPACE-PRODUCTION-PM.md)。
 - 跟踪：[Issue #42](https://github.com/zequnjiang/appeye/issues/42)，分支 `codex/research-workspace-production`，起点 `origin/main` 的 `3587bd1`。
 - 依据：[完整原型](RESEARCH-PROTOTYPE.md)、[应用库批注](PROTOTYPE-LIBRARY-POLISH.md)、[详情外链批注](PROTOTYPE-DETAIL-LINKS.md)、[MVP](MVP.md)、[V0.2](V0.2.md) 与 [工作流](../workflow.md)。
 - 实施接口以 CEO 维护的 [API 契约](RESEARCH-WORKSPACE-API.md) 为准；不得因命名调整省略本文权限、来源及完整流程要求。

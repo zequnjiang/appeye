@@ -1,7 +1,7 @@
 # 正式研究工作台：后端自检与集成交付
 
 - 关联 [Issue #42](https://github.com/zequnjiang/appeye/issues/42)、[PM 需求](../requirements/RESEARCH-WORKSPACE-PRODUCTION.md)、[API 契约](../requirements/RESEARCH-WORKSPACE-API.md)。
-- 日期：2026-09-09，Asia/Shanghai。当前为开发自检/独立回归阶段，尚不代替最终 PM 验收。
+- 日期：2026-09-09，Asia/Shanghai。候选实现为 `e2d550d`，对应 [PR #43](https://github.com/zequnjiang/appeye/pull/43)。最终 PM 验收及实际升级证据另见下文。
 - CEO 负责后端、持久迁移、真实资料映射、集成与运行交付；CTO 独立负责正式前端，[自检报告](RESEARCH-WORKSPACE-FRONTEND-CTO.md)。Alex 独立测试与缺陷记录见 [报告](RESEARCH-WORKSPACE-PRODUCTION-ALEX.md)。
 
 ## 实现
@@ -29,6 +29,47 @@
 
 真实字段联调测得副本 warm 请求应用库约 42 ms、市场活动约 309 ms，应用库 confirmed 为 506 项。以上是当时副本样本，不是全历史统计、真实整库迁移或线上性能证明。独立 4173 原型未改动；源生产 3000 仍由唯一 launchd 采集服务托管。
 
-## 待最终集成补充
+## 最终候选检查
 
-正式升级按 [运行手册](../operations/RESEARCH-WORKSPACE-UPGRADE.md) 执行：最终类型/构建/测试、停唯一采集服务、WAL 检查点、一致性全库备份、008 迁移前后旧表与固定 2,024 cohort/队列摘要、恢复服务并记录实际接口用时和采集心跳。完成后补实际结果，再交 PM 最终验收；此文暂不宣称生产升级、CI、PR 合并或 #11 原批次完成。
+- `npm run typecheck` 前后端通过。分别构建到 `.artifacts/research-release/server` 与 `client` 并复制 SQL 迁移；没有边构建边覆盖线上 `dist`。
+- 最终 `npm test` **265/265 通过**，51.59 秒，0 跳过；`.artifacts/research-final-full-tests.log`。
+- `npm audit --omit=dev --audit-level=high`：0 vulnerabilities；`git diff --check` 通过。
+- 候选 `e2d550d` 的 [CI run 34317881333](https://github.com/zequnjiang/appeye/actions/runs/34317881333) 两条门禁 `Research prototype` / `verify` 均成功，包含正式完整检查、浏览器测试与依赖审计。最终报告提交后的 HEAD 仍需再次确认同一两条门禁。
+- CTO 最后 30 项前端/API/缓存自检通过；Alex 最终 10 项独立浏览器与 13 项独立后端通过，另有真实资料副本操作链验证。数字之间有复用，不相加冒充互不重叠用例。
+
+## 完整备份与迁移保留
+
+按照 [运行手册](../operations/RESEARCH-WORKSPACE-UPGRADE.md) 卸载唯一 launchd 服务，确认无数据库打开句柄及活跃采集锁，完成 WAL TRUNCATE 检查点后备份。
+
+- 完整文件 `data/backups/appeye-before-2026-09-09-research.sqlite`，**67,915,177,984 bytes**，权限 0600，APFS 独立 inode 的写时复制克隆。备份时间 06:20:37–06:22:17 UTC；核对旧表数量/高水位、apps 全字段、cohort、完整队列行 SHA、schema/migrations，并对文件首/中/尾字节块复核。该方法在停写后执行，不直接复制活跃主库遗漏 WAL。
+- 迁移前实际 **2,613 个应用、18,183 份快照、6,142,524 行评论样本**；原批次 **2,024 成员**。这些是本地表记录，不当全球市场覆盖或独立自然人数量。
+- 008 于 06:22:37 UTC 应用，完整迁移及摘要复核耗时 **100.203 秒**。38 张旧表的 counts/high-water、appsHash、cohortHash、所有队列行摘要及原表定义 **全部一致，errors=[]**。
+- 新增 16 张 `research_*` 表；除默认规则配置 1 行以外全部为空，没有迁入原型应用、测试用户/客户或研究内容。
+- 本地原始证据：`data/batches/2026-09-09-research-{before,backup,migration}.json`，受控目录不提交 Git。
+
+维护中首个摘要脚本一次性 `.all()` 读取历史任务响应，超过 Node 默认 4 GiB 堆并中止，尚未备份/迁移。改用 `.iterate()` 逐行更新 SHA 后重跑成功，观察 RSS 约 100 MiB；没有通过扩大堆掩盖问题。该失败在停写校验阶段，数据库当时只完成 WAL 检查点，未修改业务资料，后续全量摘要证明保留一致。
+
+正式服务恢复、实际 API 用时和采集恢复状态在下一节补记录。本次不宣称 #11 原扫描完成。
+
+## 正式服务恢复与实际入口
+
+发布 `c8c1822`（`e2d550d` 加窄屏集合 CSS 修复）至原 `dist`，保留旧发布目录 `.artifacts/pre-2026-09-09-research-dist`；重新 bootstrap 原 `com.appeye.collector`。唯一 3000 监听/采集所有者 PID 为 69287。独立 4173 原型保持原样。
+
+06:27:44–06:28:36 UTC 对完整生产库实际验证：health/live、原管理员密码平台登录、默认应用库、今日活动、阿根廷 Credito Uno（id 2053）详情、全冻结 CSV、客户空间管理都成功。平台访问 `/api/research/state` 正确 403；正式客户/用户为 0，没有借验证创建假客户。IAB 原 3000 标签已重新加载、以原管理员入口登录并目视验证正式首页。
+
+| 请求 | 实际耗时 / 结果 |
+| --- | --- |
+| 刚恢复时首个 health | 11,555 ms，200；包含恢复期间等待，不隐去冷启动延迟。 |
+| 20 行全库查询 | 712 ms，200，快照共 511 个已确认应用。 |
+| 今日全部动态 | 1,325 ms，200，290 条当时真实事件。 |
+| 阿根廷目标包查询 / 详情 | 88 ms / 13 ms，200，`com.creditouno.loan` 仍已确认且保留真实来源。 |
+| 当前快照 CSV | 16 ms，206,295 bytes，attachment，全部冻结范围。 |
+| 采集状态 / 扩展状态 | 1,262 ms / 62 ms，200。 |
+
+这是完整本地库一次实际请求序列，不是并发容量或服务等级承诺；市场数据随后继续变化，IAB 稍后读到 512 个 confirmed 与 295 条当日事件属于正常采集推进。
+
+采集心跳从 `06:27:55.559Z` 推进到 `06:28:33.508Z`，小时周期成功任务从 1,719 到 1,743，原批次 `lastProgressAt` 从 `06:27:37.374Z` 到 `06:28:10.981Z`，真实应用总数从 2,613 到 2,614。六小时扩展仍启用，并保留现有十二市场预算与状态。未新增第二个采集协调器。
+
+实际运行仍有既有排队/overdue、商店 404/应用未找到及网络失败记录；没有清空或伪装成功。该时点原批次 pending 146、reviewFailed 41，小时周期仍未跑完，扩展周期也有预算延期/待处理。恢复运行不等于所有历史采集或原 #11 批次完成，这些继续由既有 #11/#24 跟踪。
+
+首次真实研究使用方式：原管理员密码选择“平台运营”登录，在“客户与成员”创建空间并邀请首位管理员；受邀客户用自己的邮箱/密码登录。邀请为可复制链接，不发送真实邮件，也不继承原型测试身份。已保存的公开事实与历史全部保留。
