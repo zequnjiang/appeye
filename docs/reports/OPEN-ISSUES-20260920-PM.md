@@ -1,8 +1,8 @@
 # 开放 Issue 独立 PM 验收（2026-09-20）
 
-- 当前状态：**预审完成，最终验收待 Alex 正式交接和发布后证据；本报告尚未放行关闭任何 Issue。**
-- 需求：[OPEN-ISSUES-20260920](../requirements/OPEN-ISSUES-20260920.md)，共15项现有 Issue、36项 AC。
-- 实现预审基线：`98b43863ae813620ac76bcc45977e00109c7c8ad`；[PR #48](https://github.com/zequnjiang/appeye/pull/48)，分支 `codex/open-issues-20260920`。后续补修应另列实际验证基线，不把此提交的检查当作最终提交检查。
+- 当前状态：**正式核对发现运行阻断，13项功能仍待最终验收；#24来源复验、#11运营终验分别未完成。本报告尚未放行关闭任何 Issue。**
+- 原需求：[OPEN-ISSUES-20260920](../requirements/OPEN-ISSUES-20260920.md)，15项现有Issue、36项AC保持不变；新增独立发布阻断[#49需求](../requirements/ISSUE49-RUNTIME.md)，4项RUN AC。本轮矩阵共16项Issue。
+- 初次实现预审基线：`98b43863ae813620ac76bcc45977e00109c7c8ad`；#46补修及正式发布基线：`bd5c171991f450976af10d95fb13fad414412dca`。[PR #48](https://github.com/zequnjiang/appeye/pull/48)，分支 `codex/open-issues-20260920`；不把先前提交的检查当作最终提交检查。
 - PM 本轮只读审阅需求、实现、CTO 报告与本地聚合证据；没有改业务代码、操作正式库、重新采集、重跑大库审计或执行 GitHub 关闭。
 
 ## 预审证据与结论边界
@@ -40,14 +40,35 @@ PM已亲读以下忽略的本地证据摘要：
 | [#41](https://github.com/zequnjiang/appeye/issues/41) | OI41-01–02 | 待最终验收。失败项给真实结束时间、cycle身份/计划/启动时间；最近20条跨周期历史与当前周期计数明确区分。 | Alex多周期/缺时间/往返实测、正式API归属与发布版本确认。 |
 | [#44](https://github.com/zequnjiang/appeye/issues/44) | OI44-01–02 | 待最终验收。共用中文字段与前后标签，桌面三列、窄屏仍各值有方向，null/0/对象保留。隔离真实PeraMoo已核。 | Alex桌面/390正式结论与实际发布版本确认。 |
 | [#45](https://github.com/zequnjiang/appeye/issues/45) | OI45-01–03 | 待最终验收。储蓄收益单列non-loan且权重0，不用于借款成本或对比；混合产品中的贷款证据仍独立。隔离真实Maya已核。 | 正式旧分析维修与Maya保存证据、原资料/分类保护、Alex独立核对；不将规则建议变化当人工分类变化。 |
-| [#46](https://github.com/zequnjiang/appeye/issues/46) | OI46-01–02 | **待边界收口和最终验收。** 当前实现及真实样本已覆盖“当前详情缺失、补充视图仍保留旧成功链接”；更早历史记录被后续成功空返回遮住的情形见下节。 | CEO/CTO对该边界处理；Alex当前优先/同身份/时间来源/危险URL/失败保旧复验及最终版本确认。不访问外部网站推断有效性。 |
+| [#46](https://github.com/zequnjiang/appeye/issues/46) | OI46-01–02 | **边界补修工程已闭环，待正式运行最终验收。** 现在按同App/市场读取最近含安全链接的available历史，即使最新补充empty仍可发现，原时间/来源/historyId不改。 | Alex已独立通过available→empty、危险/错市场/未知市场、390及显式null拒绝fallback；待正式服务实际历史DTO/页面最终核对。不访问外部网站推断有效性。 |
 | [#47](https://github.com/zequnjiang/appeye/issues/47) | OI47-01–02 | 待最终验收。明确loanCategory枚举、中文标签和来源，从已授权冻结全集取值；保留原category兼容列。原category本来即信贷细分，不沿用Issue中的误诊。 | Alex冻结后分类变化/跨会话拒绝/多页与空值公式边界、真实GCash下载及正式版本确认。 |
+| [#49](https://github.com/zequnjiang/appeye/issues/49) | RUN01–04（独立增量） | **发布阻断，待定位/修复/独立实测。** 同collector运行时首页/诊断请求长时间等待；暂停审计后仍复现。 | 完整热路径定位、语义等值修复、正式ready后至少60秒的双端点响应门禁、实际任务推进与原失败页面往返；Alex→PM→最终HEAD CI。 |
 
 ## 预审提出的有限差距
 
 **#46 历史资料的范围。** 98b43863的 `historicalPrivacy()`读取详情返回的最新 `enrichments`。该表在失败时保留上次成功资料，但之后收到一次成功 `empty` 时会更新为该次空数据；较早链接只留在 `enrichment_history`，当前辅助不会发现。原Issue具体样本的补充仍为available，因此该样本已覆盖；OI46-01“存在成功历史补充”的完整承诺仍需处理这一分支。
 
-PM交接后，CEO明确**保留完整AC，不收窄需求**，决定补服务端同App/市场最近含安全链接的available历史读取，由CTO消费展示、Alex独立回归后再部署。当前为已确认待闭环差距；没有将未覆盖分支改写为通过，也没有因此要求重做无关功能。
+PM交接后，CEO明确**保留完整AC，不收窄需求**，决定补服务端同App/市场最近含安全链接的available历史读取，由CTO消费展示、Alex独立回归后再部署。当时将该差距保留待闭环，没有将未覆盖分支改写为通过，也没有因此要求重做无关功能。
+
+增量结果：bd5c171已补服务端只读历史查询及明确的历史DTO，PM亲读实现确认同app、同requestCountry、available及HTTP(S)筛选，原始history不修改；前端显式null/不匹配身份不沿用别的旧值。Alex正式增量报告确认独立受影响组合28/28、类型通过，其中新增2项专门验证此缺口。CEO最终全套309/309、类型/隔离构建与audit 0另列执行归属。该差距的工程部分已闭环，未收窄需求。
+
+## 正式发布证据预核
+
+已读[CEO受控发布](OPEN-ISSUES-20260920-DEPLOYMENT.md)。2026-09-20 04:15:49Z第二份完整备份为107,135,963,136字节、0600、独立APFS inode，采用业务表摘要及首/中/末字节样本验证，不宣称全文件SHA。04:16:13Z保存分析维修记录为3,563/3,563、缺失原来源0、网络0，应用事实/分类、私有研究、国家设置和原2024成员保持；随后发布bd5c171，新前端资源`index-DFVfwQzx.js`。
+
+PM独立读取`release-evidence.json`、`production-api.json`及`alex-deployment-proof.json`，并实际重新计算后者引用的10份证据SHA和`dist`/暂存release各216个产物文件SHA，**0差异**；未重复扫描107GB备份。正式八目标API已显示heuristics-3、两商店32–40最高40、Maya15%为非借款、泰文日期及历史隐私DTO；CSV待细分和手动任务真实身份由CEO实际核对。Alex部署产物核对为04:19:46Z、`errors=[]`，正式浏览器/运行最终报告尚待交接。这些证据不代表所有浏览器流程均在正式环境重新执行。
+
+bd5c171的[CI两项成功](https://github.com/zequnjiang/appeye/actions/runs/35488680910)由CEO核对；包含最终报告的新HEAD仍须另行通过CI。
+
+### 正式运行新增阻断：采集推进时服务请求长时间等待
+
+上述产物与资料保留证明仍有效，但不能替代运行可用性。Alex正式浏览器先遇首页30秒超时；第二次在新版资源、登录和PK Apple APR实际通过后，PK GP身份诊断超过10秒仍在loading。`alex-formal-ui.json`记录`passed=false`；页面JS `errors=[]`不表示完整流程通过。原失败完整保留。
+
+Alex和CEO暂停审计后仍复现正式首页超时；CEO随后报告collector网络返回后的`Store.all`同步SQLite读取阻塞。准确热路径与补修正由开发诊断，PM不据此提前断言所有延迟均由某一索引导致。**13项功能不作最终通过，等待运行问题修复和Alex正式复验；不通过延长探针超时或停止collector取得验收绿灯。**
+
+CEO已注册[#49](https://github.com/zequnjiang/appeye/issues/49)并采纳PM四条最小增量标准，正式为[RUN01–04](../requirements/ISSUE49-RUNTIME.md)：定位实际SQL/执行计划；业务结果等值且不改采集语义/历史；正式已ready后同一collector实际推进中至少60秒有界交错请求首页和health、每次2秒内正确200且无超时；Alex核对产物/队列恢复并重走曾失败的诊断详情往返。原36项AC未改。初测候选336ms、来源8ms、批次任务15ms、快照版本10ms均不足解释超过30秒的阻塞，尚不将任何单项猜测认定根因。
+
+Alex另已交接维护前完整timeline聚合：2026-09-20 04:07:16–04:28:23Z，原2024成员、52,582成功页/165失败、7,378,311原始/规范行、7,378,102 seen/current、27,003原ID及旧manual response 29（job1316、150行）的写入时间线核对，未解释差异0。PM已读取该聚合文件确认其manual范围。该备份不含之后恢复与新manual37；它补足维护前OI11-04证据，仍不能用于关闭#11或解除#49。
 
 ## 最终放行条件
 

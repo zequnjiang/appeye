@@ -936,34 +936,73 @@ export function discoveryIdentity(
     ...args,
   );
   const candidate = store.one(
-    'SELECT * FROM discovery_candidates WHERE country=? AND store=? AND external_id=?',
+    'SELECT id,status,error,analysis FROM discovery_candidates WHERE country=? AND store=? AND external_id=?',
     ...args,
   );
   const hasBatch = !!store.one("SELECT name FROM sqlite_master WHERE name='full_scan_sources'");
-  const sourceQueries = [
-    "SELECT 'extended' channel,id,kind,source,observed_at,processed_at,keyword,parent_app_id,enrichment_history_id,data,raw FROM discovery_sources WHERE country=? AND store=? AND external_id=?",
-    "SELECT 'hourly' channel,id,'hourly' kind,source,observed_at,observed_at processed_at,keyword,NULL parent_app_id,NULL enrichment_history_id,data,raw FROM monitor_sources WHERE country=? AND store=? AND external_id=?",
+  const sourceTables = [
+    {
+      channel: 'extended',
+      table: 'discovery_sources',
+      fields: 'kind,processed_at,parent_app_id,enrichment_history_id',
+    },
+    {
+      channel: 'hourly',
+      table: 'monitor_sources',
+      fields:
+        "'hourly' kind,observed_at processed_at,NULL parent_app_id,NULL enrichment_history_id",
+    },
     ...(hasBatch
       ? [
-          "SELECT 'batch' channel,id,'batch' kind,source,observed_at,observed_at processed_at,keyword,NULL parent_app_id,NULL enrichment_history_id,data,raw FROM full_scan_sources WHERE country=? AND store=? AND external_id=?",
+          {
+            channel: 'batch',
+            table: 'full_scan_sources',
+            fields:
+              "'batch' kind,observed_at processed_at,NULL parent_app_id,NULL enrichment_history_id",
+          },
         ]
       : []),
   ];
+  // Sort only index-sized metadata. Full raw/data may contain large store responses
+  // and must not be copied into a sorter for every historical source of an identity.
+  const sourceQueries = sourceTables.map(
+    ({ channel, table }) =>
+      `SELECT '${channel}' channel,id,observed_at FROM ${table} WHERE country=? AND store=? AND external_id=?`,
+  );
   const sourceArgs = sourceQueries.flatMap(() => args);
-  const sources = store.all(
-    `SELECT * FROM (${sourceQueries.join(' UNION ALL ')}) ORDER BY observed_at DESC,channel,id DESC LIMIT ? OFFSET ?`,
+  const sourcePage = store.all(
+    `SELECT channel,id,observed_at FROM (${sourceQueries.join(' UNION ALL ')}) ORDER BY observed_at DESC,channel,id DESC LIMIT ? OFFSET ?`,
     ...sourceArgs,
     identity.limit ?? 20,
     identity.offset ?? 0,
   );
+  const sources = sourcePage.map(({ channel, id }) => {
+    const definition = sourceTables.find((entry) => entry.channel === channel)!;
+    return store.one(
+      `SELECT '${channel}' channel,id,source,observed_at,keyword,${definition.fields},data,raw FROM ${definition.table} WHERE id=?`,
+      id,
+    )!;
+  });
+  // Resolve the two indexed identity paths separately, then read only the final
+  // twenty task metadata rows. The old OR scanned tasks for the whole market.
+  const extendedIds = store.all(
+    `SELECT id FROM (
+      SELECT id FROM discovery_tasks WHERE candidate_id=? AND country=? AND store=?
+      UNION
+      SELECT t.id FROM discovery_sources s JOIN discovery_tasks t ON t.id=s.task_id
+      WHERE s.country=? AND s.store=? AND s.external_id=? AND t.country=? AND t.store=?
+    ) ORDER BY id DESC LIMIT 20`,
+    candidate?.id ?? -1,
+    identity.country,
+    identity.store,
+    ...args,
+    identity.country,
+    identity.store,
+  );
   const tasks = store
     .all(
-      `SELECT t.* FROM discovery_tasks t WHERE t.country=? AND t.store=? AND
-    (t.candidate_id=? OR t.id IN (SELECT task_id FROM discovery_sources WHERE country=? AND store=? AND external_id=?)) ORDER BY t.id DESC LIMIT 20`,
-      identity.country,
-      identity.store,
-      candidate?.id ?? -1,
-      ...args,
+      `SELECT id,kind,status,error,stop_reason FROM discovery_tasks WHERE id IN (${extendedIds.map(() => '?').join(',') || 'NULL'}) ORDER BY id DESC`,
+      ...extendedIds.map((entry) => entry.id),
     )
     .map((t) => ({
       id: t.id,
@@ -974,7 +1013,7 @@ export function discoveryIdentity(
       stopReason: t.stop_reason,
     }));
   for (const t of store.all(
-    'SELECT * FROM monitor_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
+    'SELECT id,kind,status,error,result FROM monitor_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
     ...args,
   ))
     tasks.push({
@@ -988,7 +1027,7 @@ export function discoveryIdentity(
     });
   if (store.one("SELECT name FROM sqlite_master WHERE name='full_scan_tasks'"))
     for (const t of store.all(
-      'SELECT * FROM full_scan_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
+      'SELECT id,kind,status,error,stop_reason FROM full_scan_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
       ...args,
     ))
       tasks.push({
@@ -1001,7 +1040,7 @@ export function discoveryIdentity(
       });
   if (app)
     for (const j of store.all(
-      'SELECT * FROM jobs WHERE app_id=? ORDER BY id DESC LIMIT 10',
+      'SELECT id,type,status,error FROM jobs WHERE app_id=? ORDER BY id DESC LIMIT 10',
       app.id,
     ))
       tasks.push({
@@ -1048,10 +1087,15 @@ export function discoveryIdentity(
     error: app?.last_error ?? candidate?.error ?? null,
     analysis: parse(app?.loan_analysis ?? candidate?.analysis ?? batchCandidate?.analysis ?? null),
     tasks,
-    sourceTotal: store.one(
-      `SELECT COUNT(*) n FROM (${sourceQueries.join(' UNION ALL ')})`,
-      ...sourceArgs,
-    )!.n,
+    sourceTotal: sourceTables.reduce(
+      (total, { table }) =>
+        total +
+        store.one(
+          `SELECT COUNT(*) n FROM ${table} WHERE country=? AND store=? AND external_id=?`,
+          ...args,
+        )!.n,
+      0,
+    ),
     sources: sources.map((s) => ({
       id: `${s.channel}:${s.id}`,
       kind: s.kind,

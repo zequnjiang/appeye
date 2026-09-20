@@ -65,3 +65,42 @@
 - `git diff --check -- src tests/open-issues-ui.test.ts docs/reports/OPEN-ISSUES-20260920-CTO-UI.md`：通过。
 
 此增量再次交 Alex 定向验证。前述 Alex 已完成的305项全套结果发生在本增量之前，不能用它替代新增历史分支的后续独立检查；原测试证据保留。
+
+## #49 发布阻断：市场查询的最小性能修复
+
+需求：[ISSUE49-RUNTIME.md](../requirements/ISSUE49-RUNTIME.md)，RUN01–04。此项是后续新增发布阻断，**不由前述界面通过结果代替验收**。CEO给出的正式调用 trace 已定位 `workspaceActivity → libraryRows SELECT a.*` 及重复 `getMarketActivity` 读取；其正式单段1.999s/1.462s属于 CEO trace，本节以下计时则为 CTO 独立合成/备份测量，不能混为同一环境。
+
+本次授权仅修改 `server/workspace-market.ts`、`server/market-activity.ts` 与 `tests/runtime-market.test.ts`，无 DDL、无数据迁移、无正式库写入，无 collector/预算/限速/分页 token/队列/调度修改。其它 #49 批次 summary 与诊断来源查询由 CEO/另一开发分工负责。
+
+### 修复行为（RUN02）
+
+- `workspaceActivity` 的入选身份/类别只需要 id、country、store、category，改为轻量读取，避免为了计算成员数加载并解析全量应用详情与分析。
+- 原流程为分页、精选和各国最新动态重复生成完整事件（六国未筛选时共8次）。改为单次生成完整有序集合，同时派生原分页响应、精选4条和各国最新事件；不是从当前页或前200条推算国家卡片。
+- 市场查询和所需历史快照仅投影实际展示的 icon/version/releaseNotes/url/storeUpdatedAt/发布日期原文，SQLite `->` 保留 JSON 类型，避免将大 raw/storeData 未使用字段送到 JS。`appIds` 在 SQL 内以 `json_each` 限定，不将不在授权范围的应用大字段取出后再丢弃。
+- 公开 `getMarketActivity` 响应形状、窗口/时区、完整类别/国家计数、事件排序、唯一应用/事件区别、分页范围和数据集均保持。普通 `libraryRows` 仅将 `a.*` 改为其实际已使用的列，返回 DTO 和既有过滤/冻结快照/权限检查保持。
+
+### 等值与隔离验证
+
+1. 新 `tests/runtime-market.test.ts` **3/3通过**：64个国家/商店/信贷范围/事件类型/日期/偏移输入与原公开组合完整深等；36市场记录形成360事件，验证超过200条后的分页、全集卡片、精选与按国最新；包含 candidate/excluded 不混入客户集合、unknown分母、零值、invalid/missing/布尔/对象/数组发布日期、首快照与当前来源不同、版本变化及 old/new 原值。调用后原 apps 全行不变。
+2. 修改前两个模块已冻结在 ignored `.artifacts/runtime-market-before/`（仅调整模块导入路径以可单独执行，函数逻辑未改）。独立 `.artifacts/runtime-market-benchmark.ts` 在同一隔离内存 SQLite 上调用前后实现：**64查询完整响应深等、9种原文类型深等、apps/snapshots/changes/research_app_categories 四表全行保持**。摘要 `.artifacts/runtime-market-equivalence.json`。这同时覆盖了新旧底层 JSON 投影，而非仅将新函数与自身比较。
+3. 合成36应用、360事件、应用 JSON 大于9MB时，实际事件人口查询1次、传到JS的投影 JSON 合计7011字节；4轮前44.5–49.8ms、后11.8–12.7ms。该内存数据有明确合成填充，不代表正式磁盘/collector吞吐。
+4. `npx tsx --test tests/runtime-market.test.ts tests/hourly-market.test.ts tests/research-workspace.test.ts tests/alex-research-workspace.test.ts tests/open-issues-backend.test.ts tests/alex-open-issues-backend.test.ts`：**52/52通过，2.090s**，日志 `.artifacts/runtime-market-regression.log`。覆盖小时来源/历史保护和客户鉴权/分类/快照/CSV既有回归。
+5. `npm run typecheck` 通过，日志 `.artifacts/runtime-market-typecheck-final.log`；限定源码 `git diff --check` 通过。未向生产 dist 构建。
+
+初轮3项中1项因夹具假定“第一个国家必为TH”失败；真实默认国家顺序并非该假定，已在测试按实际身份查找，产品代码未为测试改国家顺序。原初轮输出 `.artifacts/runtime-market-tests.log` 和复跑 `.artifacts/runtime-market-tests-recheck.log` 均保留。
+
+### 完整备份只读测量（RUN01/02）
+
+CEO明确授权后，对 `data/backups/appeye-before-2026-09-20-release.sqlite` 使用 `DatabaseSync({readOnly:true})` 加 Store 原型 facade；**没有调用 Store 构造、迁移或运行任何写语句**。脚本 `.artifacts/runtime-market-real-readonly.ts`，摘要/时点/响应哈希 `.artifacts/runtime-market-real-readonly.json`，没有在报告输出应用资料或原始响应正文。所有输入固定日期与相同参数，避免默认时钟造成假差异。
+
+| 固定真实输入 | 修改前 | 修改后 | 完整响应 |
+| --- | ---: | ---: | --- |
+| 2026-09-20 / 六国 / cash-priority / all / limit20 offset100 | 737.6ms | 31.3ms | deepEqual；总72、6国家卡片，越界页空 |
+| 2026-09-20 / PH / Apple / all贷款类别 / observedUpdate / limit1 | 82.5ms | 6.1ms | deepEqual；无匹配事件分支 |
+| 2026-09-07 / TH / unknown / firstSeen / limit5 offset20 | 330.5ms | 27.6ms | deepEqual；总87，当前页5 |
+
+这是同进程先旧后新、现有系统缓存下的3次只读备份对照，**不是冷盘基准、正式并发测试、持续吞吐结论或全107GB逐字节审计**。不能把该改善倍数外推为整个服务的固定提升。
+
+### 交接及未完成门禁（RUN03/04）
+
+两个市场模块与专项已完成 CTO 自检，可交 Alex 独立等值审阅及 CEO 隔离构建。此处不宣称 #49 已解决：仍须合并同一 Issue 的其它已证阻塞修复，正式唯一 collector 持续推进时完成 PM 要求至少60秒/每5秒交错首页与 health、每次2秒内及原失败诊断往返验证，再经 Alex/PM/精确HEAD CI放行。

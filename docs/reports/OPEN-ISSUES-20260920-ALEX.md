@@ -4,11 +4,11 @@
 
 当前结论：独立 `npm test` **305/305**（47.31秒）和 `npm run typecheck` 已通过，未运行会覆盖正式 dist 的 build。日志为 `.artifacts/issues-20260920/alex-final-tests.log` / `alex-final-typecheck.log`；初轮304/305唯一独立夹具rawDetail遗漏的输出另存 `alex-final-tests-initial-fixture-error.log`。
 
-**随后PM发现 #46 当前成功empty覆盖历史available的边界，CEO/CTO正在补修；部署与该Issue验收暂缓，305结果仅对应补修前冻结基线。** 新增有界回归和正式发布核对待追加。#11 运营终验和 #24 正式来源恢复独立判定，不能由功能通过替代。本文不授权关闭未完成 Issue。
+随后PM发现 #46 当前成功empty覆盖历史available的边界，曾暂缓部署。补修再次正式冻结后，Alex独立受影响组合 **28/28**（6.84秒）和前后端typecheck通过；其中Alex新增16项、CTO UI9项、V0.2 API3项。记录为 `alex-final-privacy-history-combination.log` / `alex-final-typecheck-privacy-history.log`。**已重新交付“无已知内部阻断，可受控部署”结论**，正式运行证据仍待后续核验。CEO随后报告最终全套309/309（47.22秒），这是CEO执行结果，未混称Alex又跑过全套。#11 运营终验和 #24 正式来源恢复独立判定，不能由功能通过替代。本文不授权关闭未完成 Issue。
 
 ## 独立测试与发现闭环
 
-新增 14 项针对性用例（后端 7、provider helper 3、浏览器 4），包括：
+新增 16 项针对性用例（后端 8、provider helper 3、浏览器 5），包括：
 
 - APR 中文 `到` 范围、实际含重复数值的年度括号说明、准确 offset；前置 `Loan customers` 的储蓄 APY、SAVE/BORROW 顺序以及月利率与费用区分。
 - 离线重分析审计插入失败时整个事务回滚；原始观测时间为 null 时不补造；分析指向旧时间时选择对应旧快照；快照不存在则列出 `unavailableSourceIds` 并逐字保旧；人工 excluded 和全部快照保持。
@@ -81,3 +81,49 @@ CTO正式交接后，Alex审阅并独立执行受限只读重放：5个历史 ta
 证据：`.artifacts/issues-20260920/alex-review-sources-before.json`、`.http.jsonl`（只引用/哈希，不含评论正文/作者/游标）、独立审计器 `.artifacts/alex-final-review-source-audit.py`。当前HTTP表没有task索引，旧逐任务查询会重复全表扫描；仅审计器改为一次流式轻量元数据映射→主键逐body读取，并避免排序携带大response。该变化已跑独立正反合成审计用例；无生产索引或数据修改。
 
 这只证明维护前全部成功页的源合法性，**不是#11最终验收**。task/response/raw/seen/current时间线审计正在另行执行，已固定原2024成员；后来manual必须用持久receipt+原HTTP+完整规范/raw证明，不能仅因fetchedAt更晚放行。165恢复结果及维护后增量仍须另验；有queued/running/deferred时不关闭#11。
+
+## #46 PM补充边界：最终增量
+
+未缩小OI46-01。独立真实SQLite/HTTP依次保存旧安全available、更近javascript、错市场、未知市场和最新成功empty：API只返回同app/同market最近安全历史的原time/source/historyId，当前仍明确empty/null；同商店ID但不同国家的另一个app没有串用。调用前后所有history逐字段保持，未认证401。
+
+独立390浏览器确认新的服务端 `historicalPrivacy` DTO在empty时显示旧成功时间与历史编号；服务端显式null或foreign appId时，不能退回旧current enrichment中的链接。CTO受影响用例补充current安全URL仍优先。两条新增Alex回归通过后，最终28组合与types再通过；不拿补修前305替代这次检查。
+
+测试文件已冻结。正式发布后还需核实际DTO的历史时间/URL，不能强制它等于当前enrichments时间，因为它可能引用更早历史。
+
+## 正式部署：产物核对与首轮运行阻断
+
+2026-09-20 04:19:46Z，Alex逐文件核对正式 `dist` 与CEO隔离release的 **216个产物SHA全部一致**，revision为`bd5c171991f450976af10d95fb13fad414412dca`。独立审阅维护脚本及已保存证据：第二次停机备份107,135,963,136字节；3563条分析重新计算，原资料/人工分类/私有研究哈希和冻结2024成员不变，网络请求0；5条related另建恢复任务且原任务/周期设置不改。这里是对CEO维护证据的独立复核，没有另扫107GB或冒称Alex执行了维护。记录为`alex-deployment-proof.json`，errorCount=0。
+
+正式页面首轮尚未通过：04:22窗口在任何凭据提交前，IPv4首页30秒超时；保留`alex-formal-ui-initial-timeout.*`。第二轮04:25:30–04:26:09Z通过实际`index-DFVfwQzx.js`身份门、登录及App373真实APR范围检查，随后App1076的PK/GP发现诊断超过10秒仍显示“正在查询已保存来源”，未取得查看详情按钮；保留`alex-formal-ui-second-diagnostic-timeout.*`与截图。此时没有页面JS错误，但不能将errors空数组写成整个回归通过。
+
+为排除磁盘审计干扰，Alex仅暂停自己的只读clone审计进程，未操作服务：04:18:48–04:22:39Z以及04:24:29–04:28:04Z。第二窗口暂停期间首页曾200/0.128秒，此后又3秒超时，不能仅将实际服务阻塞归因于审计竞争。CEO正在定位服务同步SQLite调用；Alex没有降低断言、延长等待来掩盖，也没有将该问题当作夹具错误。正式功能最终运行结论仍待稳定后的有界复测。
+
+## #11 维护前全量入库与时间线审计完成
+
+2026-09-20 **04:07:16.641–04:28:23.560Z**（含上述两段暂停），对同一一致性clone完成全部规范化响应、raw、持久receipt/attempt、页/游标接续、结束理由、去重与最终库值核对，**errorCount=0**。审计进程已退出，临时SQLite工作库已清理，没有把评论正文加载成全量内存数组。
+
+- 分母严格为外部锚点固定的2024市场身份，1536个后来入库App不扩入批次；成员SHA与PM原锚点一致。
+- 共52,747页，其中52,582成功、165失败。7,378,311页内规范化/raw记录全部对应；7,378,102批次seen身份均在库，内容、raw和fetchedAt逐项等于持久成功写入时间线。
+- 原27,003评论身份全部存在且原row ID保持。批次added=7,351,236、updated=27,075；updated是每页已存在身份写入次数，不是去重后的“评论改动人数”。
+- 唯一维护前manual评论收据29/job1316/app509的150条已加入真实应用时间线（11新增/139更新），并独立核其HTTP3096的UsvDTd身份顺序；不能仅靠current时间更晚接受来源。
+- 流结束理由：687无next-token、982合法空页（GP49+Apple933）、190个Apple第10页接口上限、165失败。失败不转换为空/自然结束。
+
+证据：`alex-review-timeline-before.json`、`alex-manual-review-source-before.json`；忽略目录审计器`alex-review-audit-timeline.mjs`及独立正反合成记录`alex-review-timeline-{base,manual}-smoke.*`。综合前述全HTTP源审计，维护前成功历史的OI11-04证据已覆盖；**维护后新增HTTP、manual37及165条有限恢复终态仍是后续增量，#11保持未终验**。
+
+04:32:33Z又完成有界维护后增量只读核对（约0.7秒）：165授权恢复任务的原身份/游标/创建信息保持，**495旧attempt及495旧HTTP逐字段不变**；此时49 failed、116 queued、52,582 succeeded，维护后新增batch response为0。新manual37/job1318/app1236的150条实际返回均由原HTTP独立解析证明，当前库150行字段/raw/fetchedAt逐项相等；请求100不裁掉实际返回150。
+
+增量记录为`alex-review-recovery-increment.json`、`alex-manual-review-source-live.json`。首版审计把累计attempt7机械视为超过3次新预算的误报保留为`alex-review-recovery-increment-initial-interruption-accounting.json`：task63014的新attempt6是04:15停机中断，4/5/7才是本轮三次实际失败；按持久attempt状态区分后error0，没有修改任务或抹掉中断。该时点仍有116待处理，继续不作#11终验。
+
+正式受控trace期间第三次保持原超时阈值复验（04:32:11.613–04:33:22.249Z）：两个PK easypaisa的32–40范围均通过，下一PH Maya诊断仍10秒loading而未完成。记录`alex-formal-ui-trace-timeout.*`，未称第三轮通过。大审计此前已自然完成，因此该次复现不与持续大审计竞争混同。新增发布阻断按[#49需求](../requirements/ISSUE49-RUNTIME.md)的RUN01–04继续处理；初步索引/IO猜测不是最终根因。
+
+## #24 正式恢复：独立来源闭环通过
+
+CEO另建的5条恢复任务113299–113303已实际成功，分别 **100/68/63/100/49** 项，14条真实HTTP、380条持久来源。两个100保持`sdk-related-result-limit`，不声称全目录；TH本次真实49项只有2次HTTP、没有续页，不要求它等于历史离线52项。
+
+Alex另写并执行`alex-related-live-replay.ts`：主键/任务索引点查后关闭正式数据库，再将这14条原HTTP按精确URL/方法/顺序输入实际SDK离线重放，任何未知网络请求硬拒绝。**全部380项的规范化字段、raw、来源身份、来源行内容和真实HTTP观测时间逐项一致，warnings为空**；四个当前null-token兼容引用也对应原HTTP时间。离线运行时间未充当实际采集时间。
+
+原5个失败任务全行SHA、15个历史HTTP原字节/时间/status保持。证据`alex-related-live-replay.json` / `.log`及provider的`related-live-verification.json`互相对应。OI24-03独立实际来源核对通过，可交PM按该接口范围判定；#49服务响应和#11完整评论运营仍分别待验。
+
+## #49 独立工程回归（等待正式自检完成）
+
+目前新增`tests/alex-open-issues-runtime.test.ts` **4/4**：既有seen精确初始化、多batch与同ID不同App、重复初始化和文件重开、INSERT OR IGNORE不增数、DELETE/跨batch UPDATE与冲突拒绝、业务事务回滚、首建计数失败时表/trigger原子回滚，以及summary全对象等值/不写库/不再扫描seen表。日志`alex-runtime-counter-tests.log`。这只是当前实现的独立有界测试，尚不替代CTO最终冻结/完整受影响回归和RUN03正式65秒采样。

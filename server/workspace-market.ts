@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { Store } from './db.js';
-import { getMarketActivity, releaseEvidence } from './market-activity.js';
+import { getMarketActivitySummary, releaseEvidence } from './market-activity.js';
 import { HttpError, tokenHash, timestamp, type Actor } from './workspace-auth.js';
 
 export const loanScopeSchema = z.enum(['cash-priority', 'personal', 'other', 'unknown', 'all']);
@@ -77,7 +77,7 @@ export function category(store: Store, appId: number) {
 }
 export function libraryRows(store: Store, query: Partial<MarketQuery> = {}) {
   const rows = store.all(
-    "SELECT a.*,c.category FROM apps a LEFT JOIN research_app_categories c ON c.app_id=a.id WHERE a.classification='confirmed'",
+    "SELECT a.id,a.country,a.store,a.external_id,a.title,a.developer,a.first_seen_at,a.last_fetched_at,a.classification_source,a.data,a.loan_analysis,c.category FROM apps a LEFT JOIN research_app_categories c ON c.app_id=a.id WHERE a.classification='confirmed'",
   );
   const scope = query.loanScope ?? 'cash-priority';
   return rows
@@ -284,41 +284,41 @@ export function workspaceActivity(store: Store, input: unknown) {
     .strict()
     .parse(input);
   if (query.country && !store.getCountry(query.country)) throw new HttpError(400, '国家不存在');
-  const selected = libraryRows(store, query);
-  const all = getMarketActivity(store, {
+  const selected = store
+    .all(
+      "SELECT a.id,a.country,a.store,COALESCE(c.category,'unknown') category FROM apps a LEFT JOIN research_app_categories c ON c.app_id=a.id WHERE a.classification='confirmed'",
+    )
+    .filter(
+      (row) =>
+        (!query.country || row.country === query.country) &&
+        (!query.store || row.store === query.store) &&
+        (query.loanScope === 'all' ||
+          (query.loanScope === 'cash-priority'
+            ? ['personal', 'unknown'].includes(row.category)
+            : row.category === query.loanScope)),
+    );
+  const {
+    response: all,
+    featuredEvents,
+    latest,
+  } = getMarketActivitySummary(store, {
     ...query,
     classification: 'confirmed',
     appIds: selected.map((row) => row.id),
-  });
-  const complete = getMarketActivity(store, {
-    ...query,
-    classification: 'confirmed',
-    appIds: selected.map((row) => row.id),
-    limit: 200,
-    offset: 0,
   });
   return {
     ...all,
     unknownTotal: selected.filter((row) => row.category === 'unknown').length,
-    featuredEvents: complete.events.slice(0, 4),
+    featuredEvents,
     countries: all.countries.map((country) => {
-      // Use the same query for each country's actual most recent event, not an invented clock.
-      const one = getMarketActivity(store, {
-        ...query,
-        country: country.country,
-        classification: 'confirmed',
-        appIds: selected.filter((row) => row.country === country.country).map((row) => row.id),
-        limit: 1,
-        offset: 0,
-      });
       return {
         ...country,
         apps: selected.filter((row) => row.country === country.country).length,
         unknownApps: selected.filter(
           (row) => row.country === country.country && row.category === 'unknown',
         ).length,
-        latestEvent: one.events[0] ?? null,
-        latestEventAt: one.events[0]?.eventAt ?? null,
+        latestEvent: latest.get(country.country) ?? null,
+        latestEventAt: latest.get(country.country)?.eventAt ?? null,
       };
     }),
   };

@@ -56,3 +56,21 @@ CEO随后反馈代表App1236的独立manual任务1318真实成功：fetched150/u
 Alex已收到离线证据与冻结接口、负责独立边界测试和正式复验；PM据实际结果判定#24，当前自检不提前宣布线上恢复。没有新增retry API，也没有更改原失败记录。
 
 #11不能凭有限失败归零或功能PR关闭：所有可继续流需有真实终态、来源限制应逐项有证据；Alex须全量核task→attempt→HTTP→response→评论/seen及页间cursor，区分并行更晚合法写入。现有`full-scan-audit.ts`为只读但含全reviews/seen统计与去重扫描，不适合100GB生产库的频繁快速检查；最终应在受控副本复用/完善独立审计脚本，不阻塞正式writer。本Agent未发任何额外真实商店请求。
+
+## #24 正式部署后只读复验补记
+
+2026-09-20T04:37:21.569Z，针对CEO在现有周期11排入的独立诊断任务113299–113303完成点查。实际网络由唯一正式coordinator执行，本Agent只核收据，不新增采集、改调度或写正式库。该时间点源码版本由CEO部署为`bd5c171`；本补记不等于PM验收。
+
+| 市场 | 新任务 | 实际HTTP数 | 持久来源/响应行数 | 结果边界 |
+| --- | --- | --- | --- | --- |
+| ID | 113299 | 3 | 100 / 100 | sdk-related-result-limit；原续页含55条，完整HTTP保留 |
+| MX | 113300 | 3 | 68 / 68 | sdk-related-ended；续页18条 |
+| PH | 113301 | 3 | 63 / 63 | sdk-related-ended；续页13条 |
+| PK | 113302 | 3 | 100 / 100 | sdk-related-result-limit；原续页含52条，完整HTTP保留 |
+| TH | 113303 | 2 | 49 / 49 | sdk-related-ended；当前首次cluster即终止，没有续页兼容事件 |
+
+五项均`succeeded`且warnings为空，共14个真实HTTP、380条来源，SDK结果身份集合全部持久化且无重复。同一目标的当前商店结果可与9月7日历史结果不同；没有以历史数量伪造实际数量。ID/PK的100条是SDK结果上限，不能称商店全集。
+
+四个实际续页原文中的null容器与保存的compatibility字段一致，包含对应HTTP ID和真实fetchedAt；TH无续页，正确保持compatibility为空。每一条source.observed_at对应它实际取得的HTTP时间，首批50条没有被改成续页时间。原5条历史任务的完整行哈希、15条原始HTTP的SHA/时间/状态均与维护前相同。此证明限于上述精确记录，并非全库逐字节证明。
+
+私有证据：`.artifacts/issues-20260920/related-live-verification.json`，两个标志`allOriginalEvidenceUnchanged`与`allFiveHaveValidReceipts`均为true。复核脚本`.artifacts/issues-20260920/audit-related-live.ts`只使用任务/HTTP主键和source.task_id索引，连接即读即关。结果已交Alex独立审查，运营验收由PM另判。
