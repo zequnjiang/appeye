@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { api, post, patch, query } from './api';
 import { ChangeComparison, sourceToText, releaseRaw, historicalPrivacy } from './display-evidence';
+import type { HistoricalPrivacyEvidence } from './display-evidence';
 import { External, Flag, storeSource, time as researchTime } from './ResearchUI';
 import {
   ClassificationNote,
@@ -1150,6 +1151,7 @@ export function AppDetail({
     reviews: Review[];
     rawDetail: unknown;
     enrichments: Enrichment[];
+    historicalPrivacy?: HistoricalPrivacyEvidence | null;
   }>(`/apps/${id}`, version);
   const [tab, setTab] = useState('overview'),
     [metric, setMetric] = useState<'score' | 'minInstalls' | 'ratings'>('score'),
@@ -1356,16 +1358,21 @@ export function AppDetail({
                     <External url={app.privacyPolicy} />
                     {!app.privacyPolicy &&
                       (() => {
-                        const saved = historicalPrivacy(app, data.enrichments || []);
+                        const saved = historicalPrivacy(
+                          app,
+                          data.enrichments || [],
+                          data.historicalPrivacy,
+                        );
                         return (
                           saved && (
                             <div className="historical-source-note">
                               <p>当前详情未提供；历史补充资料有链接，未核验其当前有效性。</p>
                               <External url={saved.url}>历史隐私协议</External>
                               <small>
-                                成功观测：{date(saved.entry.lastSuccessAt, true)} · 北京时间
+                                成功观测：{date(saved.fetchedAt, true)} · 北京时间
+                                {saved.historyId != null && ` · 历史记录 #${saved.historyId}`}
                               </small>
-                              <External url={saved.entry.source}>当时商店来源</External>
+                              <External url={saved.source}>当时商店来源</External>
                               <button className="text-button" onClick={() => setTab('enrichments')}>
                                 查看权限与隐私资料
                               </button>

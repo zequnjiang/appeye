@@ -249,3 +249,59 @@ test('#47 CSV is complete frozen snapshot with explicit three-way category and s
     store.close();
   }
 });
+
+test('#46 later empty privacy observations do not erase earlier safe historical provenance', () => {
+  const store = createStore();
+  try {
+    const app = store.createApp({
+      country: 'pk',
+      store: 'app-store',
+      externalId: 'fixture.privacy',
+    });
+    const context = { source: 'store-privacy', requestCountry: 'pk', requestLanguage: 'en' };
+    store.saveEnrichment(
+      app.id,
+      'privacy',
+      {
+        ...context,
+        status: 'available',
+        data: { privacyPolicyUrl: 'https://example.org/earlier' },
+      },
+      '2026-09-01T00:00:00Z',
+    );
+    store.saveEnrichment(
+      app.id,
+      'privacy',
+      { ...context, status: 'empty', data: null },
+      '2026-09-02T00:00:00Z',
+    );
+    store.saveEnrichment(
+      app.id,
+      'privacy',
+      { ...context, status: 'available', data: { privacyPolicyUrl: 'javascript:alert(1)' } },
+      '2026-09-03T00:00:00Z',
+    );
+    store.saveEnrichment(
+      app.id,
+      'privacy',
+      {
+        ...context,
+        requestCountry: 'ph',
+        status: 'available',
+        data: { privacyPolicyUrl: 'https://example.org/wrong-market' },
+      },
+      '2026-09-04T00:00:00Z',
+    );
+    const before = JSON.stringify(store.listEnrichmentHistory(app.id, 'privacy'));
+    const saved = store.historicalPrivacy(app.id)!;
+    assert.equal(saved.url, 'https://example.org/earlier');
+    assert.equal(saved.fetchedAt, '2026-09-01T00:00:00Z');
+    assert.equal(saved.requestCountry, 'pk');
+    assert.equal(saved.historyId, 1);
+    assert.equal(JSON.stringify(store.listEnrichmentHistory(app.id, 'privacy')), before);
+    assert.equal(store.getApp(app.id)?.privacyPolicy, null);
+    assert.equal(store.historicalPrivacy(99999), null);
+  } finally {
+    store.close();
+  }
+});

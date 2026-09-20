@@ -418,6 +418,7 @@ export function createApp(options: AppOptions) {
       },
       rawDetail: store.getRawDetail(id),
       enrichments: store.listEnrichments(id),
+      historicalPrivacy: store.historicalPrivacy(id),
       discoveries: store.listDiscoveries(id, 20).discoveries,
       snapshots: store.listSnapshots(id, 50).snapshots,
       changes: store.listChanges({ appId: id, limit: 100 }).changes,

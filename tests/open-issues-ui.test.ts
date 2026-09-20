@@ -566,14 +566,93 @@ test('OI46: historical privacy helper accepts a failed refresh only with same-id
   for (const override of [
     { appId: 2 },
     { requestCountry: 'mx' },
+    { requestCountry: null },
     { lastSuccessAt: null },
     { data: { privacyPolicyUrl: 'javascript:alert(1)' } },
     { data: {} },
     { kind: 'developer' },
   ])
     assert.equal(historicalPrivacy(app, [{ ...source, ...override }]), null);
+  const history = {
+    appId: 1,
+    url: 'https://example.test/older-history',
+    source: 'https://apps.apple.com/ar/app/id1',
+    fetchedAt: '2026-09-01T00:00:00Z',
+    requestCountry: 'ar',
+    requestLanguage: null,
+    historyId: 42,
+  };
+  assert.equal(historicalPrivacy(app, [source], history)?.historyId, 42);
+  assert.equal(historicalPrivacy(app, [source], null), null);
+  for (const invalid of [
+    { appId: 2 },
+    { requestCountry: 'mx' },
+    { requestCountry: null },
+    { fetchedAt: '' },
+    { url: 'javascript:alert(1)' },
+  ])
+    assert.equal(historicalPrivacy(app, [source], { ...history, ...invalid }), null);
   assert.equal(releaseRaw({ ...app, releasedAtRaw: 'not parsed' }, {}), 'not parsed');
   assert.equal(releaseRaw(app, {}), null);
+});
+
+test('OI46: successful empty current privacy keeps older API history visible with its own time and source, while a current link remains primary', async () => {
+  const { page, context, state } = await harness.fixture(390);
+  page.setDefaultTimeout(6000);
+  let current: string | null = null;
+  try {
+    await page.route('**/api/apps/1', (r) =>
+      r.fulfill({
+        json: detail({
+          app: { ...alexApp(1), privacyPolicy: current },
+          enrichments: [
+            {
+              appId: 1,
+              kind: 'privacy',
+              status: 'empty',
+              data: {},
+              requestCountry: 'ar',
+              lastSuccessAt: '2026-09-20T00:00:00Z',
+            },
+          ],
+          historicalPrivacy: {
+            appId: 1,
+            url: 'https://example.test/older-history',
+            source: 'https://apps.apple.com/ar/app/id1',
+            fetchedAt: '2026-09-01T00:00:00Z',
+            requestCountry: 'ar',
+            requestLanguage: null,
+            historyId: 42,
+          },
+        }),
+      }),
+    );
+    await page.locator('[data-library-row="1"] .app-cell').click();
+    const note = page.locator('.historical-source-note');
+    await expect(note).toContainText('2026/09/01 08:00');
+    await expect(note).toContainText('历史记录 #42');
+    await expect(note).not.toContainText('2026/09/20');
+    await expect(note.getByRole('link', { name: '历史隐私协议', exact: true })).toHaveAttribute(
+      'href',
+      'https://example.test/older-history',
+    );
+    await expect(note.getByRole('link', { name: '当时商店来源', exact: true })).toHaveAttribute(
+      'href',
+      'https://apps.apple.com/ar/app/id1',
+    );
+    await page.getByRole('button', { name: '返回应用库', exact: true }).click();
+    current = 'https://example.test/current-policy';
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await nav(page, '应用库');
+    await page.locator('[data-library-row="1"] .app-cell').click();
+    await expect(
+      page.locator('dl.facts a[href="https://example.test/current-policy"]'),
+    ).toBeVisible();
+    await expect(note).toHaveCount(0);
+    assert.deepEqual(state.pageErrors, []);
+  } finally {
+    await context.close();
+  }
 });
 
 test('OI29/30: display never guesses a missing year or rolls an invalid calendar date, and an empty release source is genuinely missing', async () => {

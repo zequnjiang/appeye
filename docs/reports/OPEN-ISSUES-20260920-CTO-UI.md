@@ -4,7 +4,7 @@
 
 需求：[OPEN-ISSUES-20260920.md](../requirements/OPEN-ISSUES-20260920.md)。本报告覆盖 #27、#28、#29、#30、#31、#33、#34、#41、#44、#46，以及 #32/#45 的前端证据展示。#11/#24 采集运营、#32/#45 已存分析维修和 #47 CSV 后端由 CEO 单独交接。
 
-源码冻结于 **2026-09-20 04:01 UTC（北京时间12:01）**。仅修改 `src/**`、`tests/open-issues-ui.test.ts` 与本报告；未操作真实数据库、采集进程、3000 端口或生产 `dist/`，没有提交/推送 Git。自检使用隔离 Vite 与浏览器 API 夹具，不将夹具结果冒充真实商店或真实数据库联调。
+源码首次冻结于 **2026-09-20 04:01 UTC（北京时间12:01）**；文末 #46 增量补齐后于 **04:13 UTC（北京时间12:13）再次冻结**。仅修改 `src/**`、`tests/open-issues-ui.test.ts` 与本报告；未操作真实数据库、采集进程、3000 端口或生产 `dist/`，没有提交/推送 Git。自检使用隔离 Vite 与浏览器 API 夹具，不将夹具结果冒充真实商店或真实数据库联调。
 
 ## 修改与 AC 映射
 
@@ -50,3 +50,18 @@
 交 Alex 独立验证以上 AC，特别是其原 #33 红用例、任务中部阅读锚点与失败保旧、诊断迟到请求、390/817布局及同身份历史隐私。CEO准备的真实样本数据库/隔离真实 API 联调尚未由本报告冒称完成；实际 Kredivo、历史 Apple、PeraMoo、PK 隐私样本及正式维护发布证据应由后续真实样本/发布报告补齐。
 
 本次前端代码可进入隔离真实 API 联调；最终发布、CI、PM逐Issue验收和关闭由 CEO/PM 管理。没有已知 CTO 专项未修失败；Alex/真实样本新发现仍需独立闭环。
+
+## #46 历史成功后成功空值的增量补齐
+
+初次交接后，PM指出：当前补充视图成功返回空值时会清空 `data`，更早的成功隐私链接仍在历史表，不能只检查当前 `enrichments`。CEO授权后端按同 app/国家读取最新有安全链接的历史成功记录；前端接入可选 `historicalPrivacy`（含 appId、historyId、url、source、fetchedAt、requestCountry/requestLanguage）。
+
+前端明确校验 appId 和国家一致、安全 HTTP(S) 及成功时间。字段为 `null` 时不回退旧当前资料；仅 `undefined` 兼容旧 API 夹具。旧 fallback 同样拒绝不明确国家。概况使用历史自身 fetchedAt/source/historyId，即使最新补充是成功空值，也不会把链接的观测时间改成最新空值时间。当前 `app.privacyPolicy` 仍优先，历史链接没有被提升为当前值。
+
+新增真实浏览器夹具覆盖“较早 available 链接→最新 empty 的 DTO→仍显示旧链接/旧时间/历史编号”，然后验证当前链接出现后不显示历史提示；纯辅助反例覆盖 appId/country/null-country/危险URL/缺时间，以及权威 `null` 不降级 fallback。
+
+- `npx tsx --test tests/open-issues-ui.test.ts`：**最新9/9通过，7.428s**，日志 `.artifacts/open-issues-ui-history-final.log`。
+- `npm run typecheck`：通过，日志 `.artifacts/open-issues-ui-history-typecheck.log`。
+- `npx vite build --outDir .artifacts/open-issues-ui-client`：通过，日志 `.artifacts/open-issues-ui-history-build.log`；仍未写生产 dist。
+- `git diff --check -- src tests/open-issues-ui.test.ts docs/reports/OPEN-ISSUES-20260920-CTO-UI.md`：通过。
+
+此增量再次交 Alex 定向验证。前述 Alex 已完成的305项全套结果发生在本增量之前，不能用它替代新增历史分支的后续独立检查；原测试证据保留。

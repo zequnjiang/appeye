@@ -105,12 +105,40 @@ export function releaseRaw(app: MarketApp, rawDetail?: unknown): unknown {
     ) ?? null
   );
 }
-export function historicalPrivacy(app: MarketApp, enrichments: Enrichment[]) {
+export interface HistoricalPrivacyEvidence {
+  appId: number;
+  url: string;
+  source: string | null;
+  fetchedAt: string;
+  requestCountry: string | null;
+  requestLanguage: string | null;
+  historyId: number;
+}
+export function historicalPrivacy(
+  app: MarketApp,
+  enrichments: Enrichment[],
+  history?: HistoricalPrivacyEvidence | null,
+) {
+  if (history !== undefined) {
+    if (
+      !history ||
+      history.appId !== app.id ||
+      !history.fetchedAt ||
+      history.requestCountry?.toLowerCase() !== app.country.toLowerCase()
+    )
+      return null;
+    try {
+      const url = new URL(history.url);
+      return ['http:', 'https:'].includes(url.protocol) ? { ...history, url: url.href } : null;
+    } catch {
+      return null;
+    }
+  }
   const entry = enrichments.find(
     (e) =>
       e.kind === 'privacy' &&
       e.appId === app.id &&
-      (!e.requestCountry || e.requestCountry.toLowerCase() === app.country.toLowerCase()) &&
+      e.requestCountry?.toLowerCase() === app.country.toLowerCase() &&
       e.lastSuccessAt &&
       e.data &&
       typeof e.data === 'object',
@@ -120,7 +148,16 @@ export function historicalPrivacy(app: MarketApp, enrichments: Enrichment[]) {
   if (typeof value !== 'string') return null;
   try {
     const url = new URL(value);
-    return ['http:', 'https:'].includes(url.protocol) ? { url: url.href, entry } : null;
+    return ['http:', 'https:'].includes(url.protocol)
+      ? {
+          url: url.href,
+          source: entry.source,
+          fetchedAt: entry.lastSuccessAt,
+          requestCountry: entry.requestCountry,
+          requestLanguage: entry.requestLanguage,
+          historyId: null,
+        }
+      : null;
   } catch {
     return null;
   }

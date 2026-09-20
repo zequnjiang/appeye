@@ -33,3 +33,9 @@
 ## 后续交接
 
 交 Alex 进行独立API/浏览器/真实样本验证；完成最终构建与总回归后再发布。既有正式分析需在备份及唯一服务停机保护下执行受控修复，并核对 PK/Apple1227725092、PK/GP pk.com.telenor.phoenix、PH/Apple991673877实际保存结果。#11真实源终点、#24上游兼容及各页面验收不由此报告提前放行。
+
+## PM 预审补修：完整历史隐私来源
+
+PM 发现 #46 的最后补充值在后续成功 empty 时会被清空，但历史成功记录仍在。保持原 AC：详情 API 新增 `historicalPrivacy`，从同 app、同请求国家的 available privacy 历史中按观测时间倒序选取最近安全 HTTP(S) 链接，附原始时间、来源、历史 ID；危险/非法链接跳过并继续查更早记录。不读取无关原响应，不改当前隐私字段或历史。
+
+补修自检：`npx tsx --test tests/open-issues-backend.test.ts` **6/6 通过（541.8ms）**；覆盖 available→empty→危险 URL→错市场后仍返回原安全链接、原历史逐字不变和未找到时 null。`npm run typecheck` 通过。Alex 与前端增量回归单独记录，不用此前 299/305 套件数字替代最终版本结果。

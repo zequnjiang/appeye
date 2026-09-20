@@ -559,6 +559,40 @@ export class Store {
       note: r.note,
     }));
   }
+  historicalPrivacy(appId: number) {
+    const app = this.getApp(appId);
+    if (!app) return null;
+    // A later successful empty result must not erase an older observed link.
+    // Read the indexed app/kind history without loading unrelated raw responses.
+    const rows = this.db
+      .prepare(
+        `SELECT id,fetched_at,source,request_country,request_language,data
+       FROM enrichment_history WHERE app_id=? AND kind='privacy' AND status='available'
+       AND lower(request_country)=? ORDER BY fetched_at DESC,id DESC`,
+      )
+      .iterate(appId, app.country.toLowerCase());
+    for (const row of rows) {
+      const data = parse(row.data);
+      const value = data?.privacyPolicyUrl;
+      if (typeof value !== 'string') continue;
+      try {
+        const url = new URL(value);
+        if (!['http:', 'https:'].includes(url.protocol)) continue;
+        return {
+          appId,
+          url: url.href,
+          source: row.source as string,
+          fetchedAt: row.fetched_at as string,
+          requestCountry: row.request_country as string,
+          requestLanguage: row.request_language as string,
+          historyId: row.id as number,
+        };
+      } catch {
+        // Invalid URLs remain in the original history but are not clickable.
+      }
+    }
+    return null;
+  }
   listEnrichmentHistory(
     appId: number,
     kind: EnrichmentKind,
