@@ -104,3 +104,24 @@ CEO明确授权后，对 `data/backups/appeye-before-2026-09-20-release.sqlite` 
 ### 交接及未完成门禁（RUN03/04）
 
 两个市场模块与专项已完成 CTO 自检，可交 Alex 独立等值审阅及 CEO 隔离构建。此处不宣称 #49 已解决：仍须合并同一 Issue 的其它已证阻塞修复，正式唯一 collector 持续推进时完成 PM 要求至少60秒/每5秒交错首页与 health、每次2秒内及原失败诊断往返验证，再经 Alex/PM/精确HEAD CI放行。
+
+### RUN03 首轮未通过后的应用库剩余热点补修
+
+CEO/Alex正式首轮65秒监测14请求中13成功、1次首页2003ms硬超时，时间与 GCash 应用库搜索/冻结CSV重叠。该轮**未通过2秒门禁**，没有用其余流程通过替代。检查显示应用库路径仍读取所有 confirmed 的完整 `data/loan_analysis` 再做搜索，单个匹配也需要解析全库；前一节只优化了市场动态路径。
+
+本增量仅改 `workspace-market.ts::libraryRows`：先取身份/分类元数据，用原 JS `toLocaleLowerCase().includes` 按 q/国家/商店/loanScope 过滤；候选ID才取必要 JSON 字段、原日期源和分析三个摘要字段。日期/评分/安装过滤仍使用原后置语义。analysis 各项用独立 `->` 投影区分“缺键为 undefined”与“显式 null”，根值真假性保留；不引入缓存、TTL、SQL模糊搜索、排序变化或全局客户端行为变化。`queryMarket` 的冻结/权限/CSV路径未改。
+
+验证：
+
+- `tests/runtime-market.test.ts` 最新 **4/4通过**（`.artifacts/runtime-library-tests.log`）。新增多语言名称/开发者/ID匹配、metadata无匹配时零详情读取、零评分/安装、日期边界、9种分析结构（缺键、显式null、false、0、空字符串/数组、巨量evidence）以及只有1个匹配时实际只投影1行且小于2KB。
+- 修改前冻结模块与新实现：**30查询完整DTO深等且JSON序列化完全一致、9种analysis结构一致、四表全行保持**；`.artifacts/runtime-library-equivalence.json`。因此原冻结清单 revision 所依赖的序列化没有因缺键→null或属性顺序发生变化。
+- 与前节同样的6文件受影响组合最新 **53/53通过**，日志 `.artifacts/runtime-library-regression.log`；`npm run typecheck` 通过（`.artifacts/runtime-library-typecheck.log`），限定 `git diff --check` 通过。没有重跑不受影响的15秒前端长周期测试。
+- CEO授权的完整 before-release 备份继续使用只读 facade：PH/AS `q=GCash` 匹配1行，前479.5ms→后7.1ms；默认cash-priority无搜索678行，59.3→26.8ms；无匹配查询，53.1→5.6ms。全部完整DTO深等且序列化相同，摘要 `.artifacts/runtime-library-real-readonly.json`。这是先旧后新、非冷缓存控制的备份计时，不是正式 collector 下的2秒通过证明。
+
+本增量再次冻结交 Alex 定向 library/CSV/权限回归。正式服务和数据库仍由 CEO 管理，RUN03/04 必须用包含该热点的新窗口重新验证；原未通过记录保留。
+
+### 全套并行运行后的夹具修正
+
+CEO后续全套运行在新增 library 专项出现1个失败（保留 `.artifacts/issues-20260920/library-final-tests.log`）：测试将 MX 硬编码为第1号应用的“不同国家”，但 `listCountries` 按创建时间排序，全套该轮第1号实际为MX，所以正确返回1行。修正仅为测试先读取该应用实际国家，再从夹具其它国家选择不匹配市场；生产代码、国家顺序和业务过滤均未改。
+
+`npx tsx --test tests/runtime-market.test.ts` 修正后 **4/4通过**，日志 `.artifacts/runtime-library-country-fixture-recheck.log`；交 Alex 复核该单点后由 CEO 重新运行全套。前一轮全套失败记录仍保留，不用早先局部53项通过覆盖此次失败事实。

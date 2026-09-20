@@ -238,9 +238,7 @@ test('#49 projection preserves invalid and missing source types, first-snapshot 
         activity.events.filter((e) => e.type === 'storeRelease').length,
         raw === '20 ก.ย. 2569' ? 1 : 0,
       );
-      const row = libraryRows(store, { store: 'google-play' }).find(
-        (r) => r.id === id,
-      )!;
+      const row = libraryRows(store, { store: 'google-play' }).find((r) => r.id === id)!;
       assert.deepEqual(row.releasedAtRaw, raw);
       assert.equal(
         row.releasedAt,
@@ -292,6 +290,121 @@ test('#49 one workspace request reads one event population and does not transfer
     t.diagnostic(
       JSON.stringify({ synthetic: true, apps: 36, populationReads, fullPayloadBytes, elapsedMs }),
     );
+  } finally {
+    store.close();
+  }
+});
+
+test('#49 library filters metadata before source projection and retains exact optional analysis fields and Unicode search', () => {
+  const store = fixture(128_000);
+  try {
+    store.run(
+      "UPDATE apps SET title='Crédito เงินด่วน',developer='Éditeur İSTANBUL',external_id='unique.package' WHERE id=1",
+    );
+    const saved = JSON.parse(store.one('SELECT data FROM apps WHERE id=1')!.data);
+    store.run(
+      'UPDATE apps SET data=? WHERE id=1',
+      JSON.stringify({
+        ...saved,
+        summary: 'Résumé',
+        icon: 'https://example.test/icon',
+        score: 0,
+        ratings: 0,
+        installs: '0+',
+        minInstalls: 0,
+        maxInstalls: 0,
+        storeData: { ...saved.storeData, released: null, releaseDate: '2021-08-10' },
+      }),
+    );
+    const read = store.all.bind(store);
+    let projected = 0,
+      bytes = 0;
+    store.all = ((sql: string, ...params: any[]) => {
+      const rows = read(sql, ...params);
+      if (sql.includes('analysis_verdict')) {
+        projected += rows.length;
+        bytes += Buffer.byteLength(JSON.stringify(rows));
+      }
+      return rows;
+    }) as Store['all'];
+    for (const analysis of [
+      null,
+      {},
+      { confidence: 0 },
+      { verdict: null, productType: null, confidence: null },
+      false,
+      0,
+      '',
+      [],
+      {
+        verdict: 'strong',
+        productType: 'personal-loan-or-facilitator',
+        confidence: 80,
+        evidence: 'x'.repeat(500_000),
+      },
+    ]) {
+      store.run(
+        'UPDATE apps SET loan_analysis=? WHERE id=1',
+        analysis === null ? null : JSON.stringify(analysis),
+      );
+      projected = 0;
+      bytes = 0;
+      const rows = libraryRows(store, {
+        q: 'crÉdito',
+        from: '2021-08-10',
+        to: '2021-08-10',
+        minScore: 0,
+        minInstalls: 0,
+      });
+      assert.equal(rows.length, 1);
+      assert.equal(projected, 1);
+      assert.ok(bytes < 2_000, String(bytes));
+      const row = rows[0];
+      assert.deepEqual(
+        row.loanAnalysis,
+        analysis
+          ? {
+              verdict: (analysis as any).verdict,
+              productType: (analysis as any).productType,
+              confidence: (analysis as any).confidence,
+            }
+          : null,
+      );
+      assert.equal(row.releasedAt, '2021-08-10');
+      assert.equal(row.releasedAtRaw, '2021-08-10');
+      assert.equal(row.releasedAtPrecision, 'date');
+      assert.equal(row.summary, 'Résumé');
+      assert.equal(row.score, 0);
+      assert.equal(row.ratings, 0);
+      assert.equal(row.minInstalls, 0);
+      assert.equal(row.maxInstalls, 0);
+    }
+    for (const q of ['เงินด่วน', 'éditeur', 'i̇stanbul', 'UNIQUE.PACKAGE'])
+      assert.deepEqual(
+        libraryRows(store, { q }).map((row) => row.id),
+        [1],
+      );
+    const actualCountry = store.one('SELECT country FROM apps WHERE id=1')!.country;
+    const differentCountry = store
+      .listCountries()
+      .find((country) => country.code !== actualCountry)!.code;
+    for (const query of [
+      { q: 'no-match' },
+      { q: 'crédito', country: differentCountry },
+      { q: 'crédito', store: 'app-store' as const },
+      { q: 'crédito', loanScope: 'other' as const },
+    ]) {
+      projected = 0;
+      assert.deepEqual(libraryRows(store, query), []);
+      assert.equal(projected, 0);
+    }
+    for (const query of [
+      { q: 'crédito', minScore: 1 },
+      { q: 'crédito', minInstalls: 1 },
+      { q: 'crédito', from: '2021-08-11' },
+      { q: 'crédito', to: '2021-08-09' },
+    ])
+      assert.deepEqual(libraryRows(store, query), []);
   } finally {
     store.close();
   }

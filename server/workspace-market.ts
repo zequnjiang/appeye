@@ -76,15 +76,56 @@ export function category(store: Store, appId: number) {
   return { category: row?.category ?? 'unknown', categorySource: row ? 'manual' : 'unclassified' };
 }
 export function libraryRows(store: Store, query: Partial<MarketQuery> = {}) {
-  const rows = store.all(
-    "SELECT a.id,a.country,a.store,a.external_id,a.title,a.developer,a.first_seen_at,a.last_fetched_at,a.classification_source,a.data,a.loan_analysis,c.category FROM apps a LEFT JOIN research_app_categories c ON c.app_id=a.id WHERE a.classification='confirmed'",
+  const metadata = store.all(
+    "SELECT a.id,a.country,a.store,a.external_id,a.title,a.developer,a.first_seen_at,a.last_fetched_at,a.classification_source,c.category FROM apps a LEFT JOIN research_app_categories c ON c.app_id=a.id WHERE a.classification='confirmed'",
   );
   const scope = query.loanScope ?? 'cash-priority';
+  const rows = metadata.filter((row) => {
+    if (
+      (query.country && row.country !== query.country) ||
+      (query.store && row.store !== query.store)
+    )
+      return false;
+    const category = row.category ?? 'unknown';
+    if (
+      (scope === 'cash-priority' && !['personal', 'unknown'].includes(category)) ||
+      (!['cash-priority', 'all'].includes(scope) && category !== scope)
+    )
+      return false;
+    return (
+      !query.q ||
+      [row.title, row.developer, row.external_id].some((value) =>
+        String(value ?? '')
+          .toLocaleLowerCase()
+          .includes(query.q!.toLocaleLowerCase()),
+      )
+    );
+  });
+  if (!rows.length) return [];
+  // JSON -> preserves explicit null/booleans/objects. A missing analysis key is
+  // SQL NULL, separately retained as undefined in the existing response shape.
+  const details = new Map(
+    store
+      .all(
+        `SELECT id,
+    json_object(${fields.map((field) => `'${field}',data->'$.${field}'`).join(',')},
+      'storeData',json_object('released',data->'$.storeData.released','releaseDate',data->'$.storeData.releaseDate')) data,
+    CASE WHEN json_type(loan_analysis) IN ('object','array') THEN 'true' ELSE loan_analysis END analysis_present,
+    loan_analysis->'$.verdict' analysis_verdict,
+    loan_analysis->'$.productType' analysis_product_type,
+    loan_analysis->'$.confidence' analysis_confidence
+    FROM apps WHERE id IN (SELECT value FROM json_each(?))`,
+        JSON.stringify(rows.map((row) => row.id)),
+      )
+      .map((row) => [row.id, row]),
+  );
+  const analysisValue = (value: string | null) => (value == null ? undefined : JSON.parse(value));
   return rows
     .map((row) => {
-      const data = JSON.parse(row.data);
+      const detail = details.get(row.id)!;
+      const data = JSON.parse(detail.data);
       const release = displayReleaseEvidence(data);
-      const analysis = row.loan_analysis ? JSON.parse(row.loan_analysis) : null;
+      const analysis = detail.analysis_present ? JSON.parse(detail.analysis_present) : null;
       return {
         ...Object.fromEntries(fields.map((field) => [field, data[field] ?? null])),
         releasedAt: release.releasedAt,
@@ -104,33 +145,14 @@ export function libraryRows(store: Store, query: Partial<MarketQuery> = {}) {
         categorySource: row.category ? 'manual' : 'unclassified',
         loanAnalysis: analysis
           ? {
-              verdict: analysis.verdict,
-              productType: analysis.productType,
-              confidence: analysis.confidence,
+              verdict: analysisValue(detail.analysis_verdict),
+              productType: analysisValue(detail.analysis_product_type),
+              confidence: analysisValue(detail.analysis_confidence),
             }
           : null,
       } as Record<string, any>;
     })
     .filter((row) => {
-      if (
-        (query.country && row.country !== query.country) ||
-        (query.store && row.store !== query.store)
-      )
-        return false;
-      if (
-        (scope === 'cash-priority' && !['personal', 'unknown'].includes(row.category)) ||
-        (!['cash-priority', 'all'].includes(scope) && row.category !== scope)
-      )
-        return false;
-      if (
-        query.q &&
-        ![row.title, row.developer, row.externalId].some((v) =>
-          String(v ?? '')
-            .toLocaleLowerCase()
-            .includes(query.q!.toLocaleLowerCase()),
-        )
-      )
-        return false;
       const release = typeof row.releasedAt === 'string' ? row.releasedAt.slice(0, 10) : null;
       if (
         (query.from && (!release || release < query.from)) ||
