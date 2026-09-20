@@ -362,12 +362,28 @@ export function exportMarketCsv(store: Store, actor: Actor, input: unknown) {
   };
   return (
     '\uFEFF' +
-    [...columns, 'snapshotCreatedAt', 'installsScope'].join(',') +
+    [
+      ...columns,
+      'loanCategory',
+      'loanCategoryLabel',
+      'loanCategorySource',
+      'snapshotCreatedAt',
+      'installsScope',
+    ].join(',') +
     '\r\n' +
     rows
       .map((row) =>
         [
           ...columns.map((key) => row[key]),
+          ['personal', 'other', 'unknown'].includes(String(row.category))
+            ? row.category
+            : 'unknown',
+          row.category === 'personal'
+            ? '个人现金贷'
+            : row.category === 'other'
+              ? '其他已确认信贷'
+              : '待细分',
+          row.categorySource ?? 'unclassified',
           saved.created_at,
           row.store === 'google-play'
             ? 'public cumulative; not country downloads'

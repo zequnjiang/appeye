@@ -837,6 +837,8 @@ export class Store {
       country: r.country,
       store: r.store,
       appId: r.app_id,
+      appTitle: r.app_title ?? null,
+      externalId: r.external_id ?? null,
       attempts: r.attempts,
       maxAttempts: r.max_attempts,
       progress: r.progress,
@@ -849,7 +851,10 @@ export class Store {
     };
   }
   getJob(id: number): Job | undefined {
-    const r = this.one('SELECT * FROM jobs WHERE id=?', id);
+    const r = this.one(
+      `SELECT j.*,a.title app_title,a.external_id FROM jobs j LEFT JOIN apps a ON a.id=j.app_id AND a.country=j.country AND a.store=j.store WHERE j.id=?`,
+      id,
+    );
     return r && this.jobRow(r);
   }
   listJobs(
@@ -865,18 +870,18 @@ export class Store {
     const params: SQLInputValue[] = [];
     for (const key of ['status', 'type', 'country'] as const)
       if (filters[key]) {
-        parts.push(`${key}=?`);
+        parts.push(`j.${key}=?`);
         params.push(filters[key]!);
       }
     const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
     return {
       jobs: this.all(
-        `SELECT * FROM jobs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+        `SELECT j.*,a.title app_title,a.external_id FROM jobs j LEFT JOIN apps a ON a.id=j.app_id AND a.country=j.country AND a.store=j.store ${where} ORDER BY j.id DESC LIMIT ? OFFSET ?`,
         ...params,
         filters.limit ?? 100,
         filters.offset ?? 0,
       ).map((r) => this.jobRow(r)),
-      total: this.one(`SELECT COUNT(*) n FROM jobs ${where}`, ...params)!.n,
+      total: this.one(`SELECT COUNT(*) n FROM jobs j ${where}`, ...params)!.n,
     };
   }
   claimJob(): Job | undefined {

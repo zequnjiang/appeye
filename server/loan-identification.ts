@@ -22,6 +22,8 @@ export interface LoanEvidence {
   source: 'description' | 'title' | 'summary';
   weight: number;
   numericValue?: number;
+  numericMin?: number;
+  numericMax?: number;
   rateType?: string;
   unit?: string;
 }
@@ -161,7 +163,10 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
   const descriptionClauses = clauses(desc);
   for (const c of descriptionClauses) {
     const text = c.text;
-    for (const m of text.matchAll(/\d+(?:[.,]\d+)?\s*[%％]/gu)) {
+    // A range is one claim. Never normalize its lower endpoint as a maximum.
+    const percentages =
+      /(?:(\d+(?:[.,]\d+)?)\s*[%％]?\s*(?:[-–—~～]|to|hasta|hingga|hanggang|ถึง|到|至)\s*)?(\d+(?:[.,]\d+)?)\s*[%％]/giu;
+    for (const m of text.matchAll(percentages)) {
       // Bind a percentage to its own label, never to an earlier percentage's label.
       const previousPercent = Math.max(
         text.lastIndexOf('%', m.index! - 1),
@@ -171,29 +176,47 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
       const tail = text
         .slice(m.index! + m[0].length, m.index! + m[0].length + 30)
         .split(/[,;\d]|\b(?:and|y|dan)\b|และ|اور/iu)[0];
-      const context = text.slice(from, m.index! + m[0].length) + tail;
       const prefix = text.slice(from, m.index!);
       // Prefer a preceding label. A later APR label must not rename an earlier interest value.
-      const binding = rateContext.test(prefix) ? prefix : tail;
+      const binding = rateContext.test(prefix) || /\bAPY\b/iu.test(prefix) ? prefix : tail;
       const lastLabel = (pattern: RegExp) =>
         [...prefix.matchAll(new RegExp(pattern.source, 'giu'))].at(-1)?.index ?? -1;
       const feeBound = lastLabel(fee) > lastLabel(rateContext);
-      const value = Number(m[0].replace(/[%％\s]/g, '').replace(',', '.'));
-      if (
-        !feeBound &&
-        rateContext.test(binding) &&
-        !/deposit|savings|\bAPY\b|ahorro|tabungan/iu.test(context)
-      ) {
+      const endpoints = [m[1], m[2]]
+        .filter((v): v is string => v !== undefined)
+        .map((v) => Number(v.replace(',', '.')));
+      const minimum = Math.min(...endpoints),
+        maximum = Math.max(...endpoints);
+      const isRange = endpoints.length === 2;
+      // Use the claim's local recipient/context, not a whole-description blacklist:
+      // a wallet can offer savings and loans in separate clauses or in the same sentence.
+      const savings =
+        /\bsav(?:e|es|ed|ing|ings)\b|\bdeposits?\b|\bAPY\b|ahorros?|tabungan|simpanan|เงินฝาก|ออมเงิน/giu;
+      const borrowing =
+        /\b(?:loans?|borrow(?:ing|ers?)?|lending|repayment)\b|pr[eé]stamos?|pinjam(?:an)?|utang|สินเชื่อ|เงินกู้|กู้เงิน|قرض/giu;
+      const fullPrefix = text.slice(0, m.index!);
+      const lastSavings = [...fullPrefix.matchAll(savings)].at(-1)?.index ?? -1;
+      const lastBorrowing = [...fullPrefix.matchAll(borrowing)].at(-1)?.index ?? -1;
+      const savingsTail = new RegExp(savings.source, 'iu').test(tail);
+      const savingsClaim = /\bAPY\b/iu.test(binding) || lastSavings > lastBorrowing || savingsTail;
+      if (!feeBound && (rateContext.test(binding) || /\bAPY\b/iu.test(binding))) {
         const isApr = apr.test(binding),
           isInterest = interest.test(binding),
           isMax = max.test(prefix);
-        const field =
-          isApr && isMax ? 'maximumApr' : isInterest && isMax ? 'maximumInterestRate' : 'rate';
-        const rateType = isApr
-          ? 'apr'
-          : /\b(?:CAT|CFT|TNA|TEA)\b/u.test(binding)
-            ? 'local-cost-rate'
-            : 'interest';
+        const field = savingsClaim
+          ? 'savingsYield'
+          : isApr && isMax
+            ? 'maximumApr'
+            : isInterest && isMax
+              ? 'maximumInterestRate'
+              : 'rate';
+        const rateType = savingsClaim
+          ? 'savings-yield'
+          : isApr
+            ? 'apr'
+            : /\b(?:CAT|CFT|TNA|TEA)\b/u.test(binding)
+              ? 'local-cost-rate'
+              : 'interest';
         const periodText =
           /daily|per day|monthly|per month|annual|year|ต่อปี|รายวัน|ต่อวัน|tahun|سالانہ/iu.test(
             tail,
@@ -208,14 +231,36 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
               : /monthly|per month/iu.test(periodText)
                 ? '%/month'
                 : '% (period not established)';
-        add('financial', field, 'description', context, c.start + from, 15, {
-          numericValue: value,
-          rateType,
-          unit,
-        });
-        families.add('rate');
+        // Retain the savings context when it precedes the normal 90-character window.
+        const evidenceFrom = savingsClaim && lastSavings >= 0 ? Math.min(from, lastSavings) : from;
+        const afterRate = m.index! + m[0].length;
+        const remainder = text.slice(afterRate);
+        const parenthesisEnd = /^\s*\(/u.test(remainder) ? remainder.indexOf(')') : -1;
+        // A parenthetical explanation can repeat the numeric range. Preserve it
+        // as source context without rebinding its numbers to another label.
+        const evidenceEnd =
+          parenthesisEnd >= 0 && parenthesisEnd <= 600
+            ? afterRate + parenthesisEnd + 1
+            : afterRate + tail.length;
+        const snippet = text.slice(evidenceFrom, evidenceEnd);
+        add(
+          savingsClaim ? 'non-loan' : 'financial',
+          field,
+          'description',
+          snippet,
+          c.start + evidenceFrom,
+          savingsClaim ? 0 : 15,
+          {
+            ...(isRange ? { numericMin: minimum, numericMax: maximum } : {}),
+            // Unqualified ranges have no single representative value.
+            ...(!isRange || isMax ? { numericValue: maximum } : {}),
+            rateType,
+            unit,
+          },
+        );
+        if (!savingsClaim) families.add('rate');
         if (field === 'maximumInterestRate' && unit === '%/year')
-          annualMaximumInterests.push(value);
+          annualMaximumInterests.push(maximum);
       }
     }
     const times = [...text.matchAll(units)];
@@ -380,7 +425,7 @@ export function classifyLoan(input: LoanInput): LoanAnalysis {
     classification: strong ? 'confirmed' : 'candidate',
     verdict,
     confidence: strong ? Math.min(95, 60 + families.size * 8) : hasLoan ? (hasIntent ? 45 : 25) : 0,
-    ruleVersion: `${catalog.version}/heuristics-2`,
+    ruleVersion: `${catalog.version}/heuristics-3`,
     analyzedAt: new Date().toISOString(),
     sourceObservedAt: input.observedAt || null,
     summary: strong

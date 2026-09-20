@@ -90,6 +90,8 @@ export interface Review {
 }
 export interface Job {
   id: number;
+  appTitle?: string | null;
+  externalId?: string | null;
   type: 'discover' | 'refresh' | 'reviews' | 'enrich';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   country: string | null;

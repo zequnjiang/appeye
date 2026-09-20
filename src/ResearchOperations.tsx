@@ -16,7 +16,7 @@ import {
   storeSource,
   copyText,
 } from './ResearchUI';
-import { FieldTree } from './Intelligence';
+import { FieldTree, EvidenceCard } from './Intelligence';
 import { roleLabels, categoryLabels, type Principal, type WorkspaceRef } from './research-types';
 import type { Mutation } from './ResearchPanels';
 import type { MarketApp } from './types';
@@ -543,17 +543,17 @@ function CompareCard({
             </div>
           </dl>
           <h3>条款与贷款主体线索</h3>
-          {data.app.loanAnalysis?.evidence.length ? (
-            data.app.loanAnalysis.evidence.map((e) => (
-              <blockquote key={e.id}>
-                {e.text}
-                <small>
-                  {e.field} · {e.id}
-                </small>
-              </blockquote>
-            ))
+          {data.app.loanAnalysis?.evidence.some((e) => e.kind !== 'non-loan') ? (
+            data.app.loanAnalysis.evidence
+              .filter((e) => e.kind !== 'non-loan')
+              .map((e) => <EvidenceCard key={e.id} evidence={e} />)
           ) : (
-            <p className="muted">未识别到可用描述证据。</p>
+            <p className="muted">未识别到可用贷款描述证据。</p>
+          )}
+          {data.app.loanAnalysis?.evidence.some((e) => e.kind === 'non-loan') && (
+            <p className="data-note">
+              储蓄收益等非借款证据未计入此贷款条款对比，可在详情核对原文。
+            </p>
           )}
           <h3>权限与隐私来源状态</h3>
           {['permissions', 'privacy', 'dataSafety'].map((kind) => {

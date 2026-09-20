@@ -86,6 +86,8 @@ export interface CollectionStatus {
     reviewFailed: number;
     lastProgressAt: string | null;
   } | null;
+  failureScope?: 'recent-cross-cycle';
+  failureLimit?: number;
   failures: Array<{
     id: number;
     kind: string;
@@ -93,6 +95,10 @@ export interface CollectionStatus {
     store: StoreName;
     appId: number | null;
     error: string;
+    failedAt?: string | null;
+    cycleId?: number;
+    cycleDueAt?: string | null;
+    cycleStartedAt?: string | null;
     attempts: number;
   }>;
 }

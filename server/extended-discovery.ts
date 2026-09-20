@@ -498,7 +498,14 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     }
     if (task.kind === 'similar') {
       if (!provider.related) return { data: [], raw: null, source: '', stopReason: 'unsupported' };
-      return provider.related({ ...context, externalId: payload.externalId });
+      return provider.related({
+        ...context,
+        externalId: payload.externalId,
+        onItem: (data, source, observedAt) => {
+          signal.throwIfAborted();
+          remember(task, data, source, observedAt ?? stamp(), data.raw ?? data, null);
+        },
+      });
     }
     if (!provider.extendedSearch)
       return { data: [], raw: null, source: '', stopReason: 'unsupported' };

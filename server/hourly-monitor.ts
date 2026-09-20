@@ -600,8 +600,13 @@ export function getCollectionStatus(
           )!.n,
         }
       : null,
+    failureScope: 'recent-cross-cycle',
+    failureLimit: 20,
     failures: store.all(
-      "SELECT id,kind,country,store,app_id appId,error,attempts FROM monitor_tasks WHERE status='failed' ORDER BY id DESC LIMIT 20",
+      `SELECT t.id,t.kind,t.country,t.store,t.app_id appId,t.error,t.attempts,
+        t.finished_at failedAt,t.cycle_id cycleId,c.due_at cycleDueAt,c.started_at cycleStartedAt
+       FROM monitor_tasks t LEFT JOIN monitor_cycles c ON c.id=t.cycle_id
+       WHERE t.status='failed' ORDER BY t.finished_at DESC,t.id DESC LIMIT 20`,
     ) as CollectionStatus['failures'],
   };
 }

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type Dispatch, type SetStateAction } from 'react';
+import { time } from './ResearchUI';
 import { ArrowLeft, ArrowRight, ExternalLink, LoaderCircle, Search } from 'lucide-react';
 import { post, query } from './api';
 import { useResource } from './use-resource';
@@ -103,8 +104,7 @@ const labels: Record<string, string> = {
   excluded: '已排除',
 };
 const text = (s: string) => labels[s] || s;
-const stamp = (s: string | null | undefined) =>
-  s ? new Date(s).toLocaleString('zh-CN') : '尚未记录';
+const stamp = (s: string | null | undefined) => (s ? time(s, true) + ' · 北京时间' : '尚未记录');
 const storeName = (s: StoreName) => (s === 'google-play' ? 'Google Play' : 'App Store');
 function ErrorNote({ error, cached = false }: { error: string; cached?: boolean }) {
   return error ? (
@@ -165,8 +165,17 @@ function SourceLink({ value }: { value: string }) {
     <span>{value || '未提供地址'}</span>
   );
 }
-function TaskEvidence({ id, version }: { id: number; version: number }) {
-  const [offset, setOffset] = useState(0);
+function TaskEvidence({
+  id,
+  version,
+  offset,
+  setOffset,
+}: {
+  id: number;
+  version: number;
+  offset: number;
+  setOffset: (n: number) => void;
+}) {
   const result = useResource<{
     task: unknown;
     responses: unknown[];
@@ -199,24 +208,46 @@ function TaskEvidence({ id, version }: { id: number; version: number }) {
   );
 }
 function IdentityResult({
+  offset,
+  setOffset,
+  evidenceId,
+  setEvidenceId,
+  evidenceOffset,
+  setEvidenceOffset,
+  openSections,
+  setOpenSections,
   identity,
   version,
   onSelect,
   onChanged,
 }: {
   identity: { country: string; store: StoreName; externalId: string };
+  offset: number;
+  setOffset: (offset: number) => void;
+  evidenceId: number | null;
+  setEvidenceId: (id: number | null) => void;
+  evidenceOffset: number;
+  setEvidenceOffset: (n: number) => void;
+  openSections: string[];
+  setOpenSections: (keys: string[]) => void;
   version: number;
   onSelect: (id: number) => void;
   onChanged: () => void;
 }) {
-  const [offset, setOffset] = useState(0),
-    [busy, setBusy] = useState(false),
-    [actionError, setActionError] = useState(''),
-    [evidenceId, setEvidenceId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false),
+    [actionError, setActionError] = useState('');
   const { data, error, loading } = useResource<Identity>(
     '/discovery/identity' + query({ ...identity, limit: 20, offset }),
     version,
   );
+  const disclosure = (key: string) => ({
+    open: openSections.includes(key),
+    onToggle: (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+      const open = event.currentTarget.open;
+      if (open !== openSections.includes(key))
+        setOpenSections(open ? [...openSections, key] : openSections.filter((k) => k !== key));
+    },
+  });
   async function add() {
     setBusy(true);
     setActionError('');
@@ -231,7 +262,11 @@ function IdentityResult({
     }
   }
   return (
-    <section className="panel diagnostic-identity" aria-label="身份诊断结果">
+    <section
+      className="panel diagnostic-identity"
+      aria-label="身份诊断结果"
+      data-reading-id="diagnostic-identity"
+    >
       <div className="panel-heading">
         <div>
           <h2>{identity.externalId}</h2>
@@ -268,7 +303,11 @@ function IdentityResult({
             {data.error && <ErrorNote error={data.error} />}
             <div className="button-group diagnostic-actions">
               {data.appId ? (
-                <button className="button primary" onClick={() => onSelect(data.appId!)}>
+                <button
+                  className="button primary"
+                  data-focus-key="diagnostic-app-detail"
+                  onClick={() => onSelect(data.appId!)}
+                >
                   查看应用详情
                 </button>
               ) : (
@@ -277,7 +316,7 @@ function IdentityResult({
                 </button>
               )}
             </div>
-            <details className="diagnostic-section">
+            <details className="diagnostic-section" {...disclosure('tasks')}>
               <summary>最近任务与停止原因（{data.tasks.length}）</summary>
               <div className="table-wrap">
                 <table>
@@ -295,7 +334,13 @@ function IdentityResult({
                           {t.channel} / {t.kind}
                           {t.channel === 'extended' && (
                             <small>
-                              <button className="text-button" onClick={() => setEvidenceId(t.id)}>
+                              <button
+                                className="text-button"
+                                onClick={() => {
+                                  setEvidenceId(t.id);
+                                  setEvidenceOffset(0);
+                                }}
+                              >
                                 页内查看完整记录
                               </button>
                               <a
@@ -320,9 +365,15 @@ function IdentityResult({
               </div>
             </details>
             {evidenceId !== null && (
-              <TaskEvidence key={evidenceId} id={evidenceId} version={version} />
+              <TaskEvidence
+                key={evidenceId}
+                id={evidenceId}
+                version={version}
+                offset={evidenceOffset}
+                setOffset={setEvidenceOffset}
+              />
             )}
-            <details className="diagnostic-section">
+            <details className="diagnostic-section" {...disclosure('analysis')}>
               <summary>信贷规则分析</summary>
               <FieldTree value={data.analysis} label="完整识别证据" />
             </details>
@@ -331,7 +382,12 @@ function IdentityResult({
               原观测时间与本次处理时间分别保留。历史开发者目录回收不代表今天新上架；请求国家、语言也不是用户所在地。
             </p>
             {data.sources.map((s) => (
-              <details className="diagnostic-source" key={s.id}>
+              <details
+                className="diagnostic-source"
+                key={s.id}
+                {...disclosure(`source:${s.id}`)}
+                data-reading-id={`diagnostic-source-${s.id}`}
+              >
                 <summary>
                   <strong>{s.kind}</strong>
                   <span>原观测 {stamp(s.observedAt)}</span>
@@ -357,25 +413,58 @@ function IdentityResult({
     </section>
   );
 }
+type DiagnosticIdentity = { country: string; store: StoreName; externalId: string };
+export interface DiscoveryViewState {
+  filters: { country: string; store: string; status: string; offset: number };
+  draft: DiagnosticIdentity;
+  identity: DiagnosticIdentity | null;
+  sourceOffset: number;
+  evidenceId: number | null;
+  evidenceOffset: number;
+  openSections: string[];
+}
+export const defaultDiscoveryView: DiscoveryViewState = {
+  filters: { country: '', store: '', status: '', offset: 0 },
+  draft: { country: 'ar', store: 'google-play', externalId: '' },
+  identity: null,
+  sourceOffset: 0,
+  evidenceId: null,
+  evidenceOffset: 0,
+  openSections: [],
+};
 export function DiscoveryDiagnostics({
+  view,
+  onViewChange,
   countries,
   version,
   onSelect,
   onChanged,
 }: {
+  view?: DiscoveryViewState;
+  onViewChange?: Dispatch<SetStateAction<DiscoveryViewState>>;
   countries: Country[];
   version: number;
   onSelect: (id: number) => void;
   onChanged: () => void;
 }) {
   const status = useResource<Status>('/discovery/status', version);
-  const [filters, setFilters] = useState({ country: '', store: '', status: '', offset: 0 });
-  const [draft, setDraft] = useState({
-    country: 'ar',
-    store: 'google-play' as StoreName,
-    externalId: '',
-  });
-  const [identity, setIdentity] = useState<typeof draft | null>(null);
+  const [localView, setLocalView] = useState<DiscoveryViewState>(defaultDiscoveryView);
+  const state = view || localView;
+  const setView = onViewChange || setLocalView;
+  const { filters, draft, identity } = state;
+  const setFilters: Dispatch<SetStateAction<DiscoveryViewState['filters']>> = (next) =>
+    setView((v) => ({ ...v, filters: typeof next === 'function' ? next(v.filters) : next }));
+  const setDraft: Dispatch<SetStateAction<DiagnosticIdentity>> = (next) =>
+    setView((v) => ({ ...v, draft: typeof next === 'function' ? next(v.draft) : next }));
+  const setIdentity = (identity: DiagnosticIdentity) =>
+    setView((v) => ({
+      ...v,
+      identity,
+      sourceOffset: 0,
+      evidenceId: null,
+      evidenceOffset: 0,
+      openSections: [],
+    }));
   const candidates = useResource<{ candidates: Candidate[]; total: number }>(
     '/discovery/candidates' + query({ ...filters, limit: 20 }),
     version,
@@ -533,6 +622,14 @@ export function DiscoveryDiagnostics({
         <IdentityResult
           key={`${identity.country}-${identity.store}-${identity.externalId}`}
           identity={identity}
+          offset={state.sourceOffset}
+          setOffset={(sourceOffset) => setView((v) => ({ ...v, sourceOffset }))}
+          openSections={state.openSections}
+          setOpenSections={(openSections) => setView((v) => ({ ...v, openSections }))}
+          evidenceOffset={state.evidenceOffset}
+          setEvidenceOffset={(evidenceOffset) => setView((v) => ({ ...v, evidenceOffset }))}
+          evidenceId={state.evidenceId}
+          setEvidenceId={(evidenceId) => setView((v) => ({ ...v, evidenceId }))}
           version={version}
           onSelect={onSelect}
           onChanged={onChanged}

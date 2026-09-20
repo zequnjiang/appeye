@@ -1,3 +1,5 @@
+import { time as researchTime } from './ResearchUI';
+import { ChangeComparison, sourceToText } from './display-evidence';
 import { useEffect, useRef, useState } from 'react';
 import {
   Activity,
@@ -91,20 +93,9 @@ const dateShift = (day: string, shift: number) => {
   return date.toISOString().slice(0, 10);
 };
 function timestamp(value: string | null | undefined) {
-  if (!value) return '未提供';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const date = new Date(value);
-  return Number.isNaN(+date)
-    ? value
-    : new Intl.DateTimeFormat('zh-CN', {
-        timeZone: TIME_ZONE,
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).format(date);
+  return value ? researchTime(value, true) : '未提供';
 }
+
 const textValue = (value: unknown) =>
   value === null || value === undefined
     ? '未提供'
@@ -149,16 +140,11 @@ function FieldComparison({ change }: { change: ActivityEvent['changes'][number] 
         <span>{short ? '前后对照' : `查看完整前后内容 · ${formatNumber(after.length)} 字符`}</span>
         <ChevronDown size={15} />
       </summary>
-      <div className="activity-comparison-values">
-        <div>
-          <span>上次记录</span>
-          <pre>{before}</pre>
-        </div>
-        <div>
-          <span>本次记录</span>
-          <pre>{after}</pre>
-        </div>
-      </div>
+      <ChangeComparison
+        field={change.field}
+        oldValue={change.oldValue}
+        newValue={change.newValue}
+      />
     </details>
   );
 }
@@ -236,7 +222,7 @@ function EventCard({
           <summary>
             查看商店更新说明 <ChevronDown size={14} />
           </summary>
-          <pre>{event.releaseNotes}</pre>
+          <pre>{sourceToText(event.releaseNotes)}</pre>
         </details>
       )}
       <footer className="activity-event-footer">
@@ -257,11 +243,15 @@ function EventCard({
 }
 
 export function MarketActivity({
+  scheduleOpen,
+  onScheduleOpenChange,
   version,
   countries,
   onSelect,
   onJobs,
 }: {
+  scheduleOpen?: boolean;
+  onScheduleOpenChange?: (open: boolean) => void;
   version: number;
   countries: Country[];
   onSelect: (id: number) => void;
@@ -269,7 +259,9 @@ export function MarketActivity({
 }) {
   const [day, setDay] = useState(today);
   const [followToday, setFollowToday] = useState(true);
-  const [showSchedule, setShowSchedule] = useState(false);
+  const [localSchedule, setLocalSchedule] = useState(false);
+  const showSchedule = scheduleOpen ?? localSchedule;
+  const setShowSchedule = onScheduleOpenChange || setLocalSchedule;
   const [type, setType] = useState<EventType>('firstSeen');
   const [country, setCountry] = useState('');
   const [store, setStore] = useState('');
@@ -401,7 +393,7 @@ export function MarketActivity({
           className="activity-monitor-jobs"
           aria-expanded={showSchedule}
           aria-controls="hourly-collection-progress"
-          onClick={() => setShowSchedule((shown) => !shown)}
+          onClick={() => setShowSchedule(!showSchedule)}
         >
           {cycle
             ? `${formatNumber(pending)} 待处理 · ${formatNumber(cycle.failed)} 失败`
@@ -447,7 +439,10 @@ export function MarketActivity({
           )}
           {!!status.data?.failures.length && (
             <div className="activity-schedule-failures">
-              <strong>最近采集失败</strong>
+              <strong>跨周期最近采集失败（最多 {status.data.failureLimit || 20} 条）</strong>
+              <p>
+                上方计数仅属当前/最近监测周期；此处保留跨周期失败历史，相同应用可能属于不同周期。
+              </p>
               {status.data.failures.map((failure) => (
                 <div key={failure.id}>
                   <span>
@@ -457,6 +452,19 @@ export function MarketActivity({
                     · {stores[failure.store]} · {failure.kind === 'detail' ? '详情' : '发现'} ·
                     已尝试 {failure.attempts} 次
                   </span>
+                  <small>失败时间：{timestamp(failure.failedAt)} · 北京时间（Asia/Shanghai）</small>
+                  <small>
+                    所属周期：{failure.cycleId || '未提供'}
+                    {failure.cycleId && failure.cycleId === cycle?.id
+                      ? ' · 本周期'
+                      : failure.cycleId
+                        ? ' · 其他周期'
+                        : ''}
+                  </small>
+                  <small>
+                    周期计划：{timestamp(failure.cycleDueAt)} · 启动：
+                    {timestamp(failure.cycleStartedAt)}
+                  </small>
                   <pre>{failure.error}</pre>
                   {failure.appId && (
                     <button onClick={() => onSelect(failure.appId!)}>

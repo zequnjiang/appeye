@@ -23,7 +23,14 @@ export const count = (n: number | null | undefined) =>
   n == null ? '—' : new Intl.NumberFormat('zh-CN').format(n);
 export function time(value: unknown, full = false) {
   if (typeof value !== 'string' || !value) return '未提供';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const dateOnly = new Date(`${value}T00:00:00Z`);
+    return Number.isFinite(+dateOnly) && dateOnly.toISOString().slice(0, 10) === value
+      ? value
+      : `${value}（日期待解析）`;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(value))
+    return `${value}（日期待解析）`;
   const d = new Date(value);
   return Number.isNaN(+d)
     ? value

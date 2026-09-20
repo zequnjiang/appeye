@@ -153,3 +153,15 @@ V0.2 需求与验收：[需求 #7](https://github.com/zequnjiang/appeye/issues/7
 每小时监测的本机常驻部署、launchd示例与停止/恢复步骤见[本机服务操作](docs/operations/LOCAL-SERVICE.md)。模板本身不代表已安装服务；实际运行状态以部署报告和产品监测状态为准。
 
 静默刷新与扩展发现分别通过[#21](https://github.com/zequnjiang/appeye/issues/21)和[#22](https://github.com/zequnjiang/appeye/issues/22)跟踪。[正式部署证据](docs/reports/SILENT-DISCOVERY-DEPLOYMENT.md)、[前端PM验收](docs/reports/SILENT-REFRESH-PM.md)和[扩展发现PM验收](docs/reports/EXTENDED-DISCOVERY-PM.md)记录独立测试、目标真实补录及已知来源限制。
+
+### 已保存信贷证据修复
+
+2026-09-20 的识别修复将 APR 区间保存为上下限，并把明确储蓄收益标为非借款成本。既有分析可在停止唯一采集服务并完成一致性备份后执行：
+
+```bash
+npx tsx scripts/refresh-loan-evidence.ts --apply
+```
+
+维护命令持有采集器锁，不发网络请求；保留旧/新分析审计、原来源观测时间（未知仍未知），不修改应用有效分类、人工/legacy决定、首次发现、商店原文或客户摘录。旧分析绑定历史快照时使用该原快照；缺原来源时跳过并报告对应ID。再次运行同一规则版本不会重复改写。恢复服务后，正常采集和显式人工分类仍按原流程执行。
+
+应用库 CSV 的 `category` 是信贷细分，不是商店 Finance 类别。导出同时提供明确的 `loanCategory`（personal/other/unknown）、`loanCategoryLabel` 和 `loanCategorySource`，全部来自用户当前授权的冻结清单。

@@ -206,8 +206,8 @@ export function createWorker(options: WorkerOptions) {
       skippedOlder,
       window:
         job.store === 'google-play'
-          ? '最新 100 条，按配置语言及店面请求'
-          : '最新第 1 页，按国家店面请求；语言未验证',
+          ? `请求最新 100 条，实际返回 ${reviews.length} 条；按配置语言及店面请求`
+          : `请求最新第 1 页，实际返回 ${reviews.length} 条；按国家店面请求，语言未验证`,
       country: app.country,
       language: job.store === 'app-store' ? 'und' : country.language,
     };
