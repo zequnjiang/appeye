@@ -2,9 +2,11 @@
 
 对应 [PM 需求](../requirements/OPEN-ISSUES-20260920.md) 中的 15 项 Issue。Alex 仅维护 `tests/alex-open-issues-{backend,provider,ui}.test.ts`、本报告和忽略目录中的审计材料；未修改产品源码、正式数据库、调度进程或 GitHub。
 
-当前结论：独立 `npm test` **305/305**（47.31秒）和 `npm run typecheck` 已通过，未运行会覆盖正式 dist 的 build。日志为 `.artifacts/issues-20260920/alex-final-tests.log` / `alex-final-typecheck.log`；初轮304/305唯一独立夹具rawDetail遗漏的输出另存 `alex-final-tests-initial-fixture-error.log`。
+**最终Alex结论（2026-09-22）：16项可交PM最终验收。** 正式源码`7e2d7455010a3517feb00c32a5e4e2120ec2780f`、218产物逐文件核对一致。13项功能及正式11项页面流程通过；#24五项真实来源恢复通过；#11按明确外部来源限制限定接受，保留165 failed、494个RPC code5及受控中断，不称全商店评论完整成功。**#49最新65秒窗口满足原2秒门槛：14/14正确200、最大829.71ms、0超时，同一collector实际推进。** 原三轮失败全部保留。最终关闭和发布仍以PM验收及CEO精确HEAD CI为准。
 
-随后PM发现 #46 当前成功empty覆盖历史available的边界，曾暂缓部署。补修再次正式冻结后，Alex独立受影响组合 **28/28**（6.84秒）和前后端typecheck通过；其中Alex新增16项、CTO UI9项、V0.2 API3项。记录为 `alex-final-privacy-history-combination.log` / `alex-final-typecheck-privacy-history.log`。**已重新交付“无已知内部阻断，可受控部署”结论**，正式运行证据仍待后续核验。CEO随后报告最终全套309/309（47.22秒），这是CEO执行结果，未混称Alex又跑过全套。#11 运营终验和 #24 正式来源恢复独立判定，不能由功能通过替代。本文不授权关闭未完成 Issue。
+最新Alex独立受影响组合122/122及typecheck通过；CEO最终全套333/333（52.544秒）、types和隔离build通过，执行归属分开。9月22日当前只读增量确认原2024成员、165终态、旧495attempt/HTTP和所有新增来源保持；73493只有两次完成RPC5加一次无HTTP受控中断，按有限来源判据单列，不虚报三次完成。
+
+本轮Alex独立全套最初305/305（47.31秒），其后#46补修独立28/28、#49三模块99/99、应用库补修43/43及最后夹具修正4/4，相关typecheck均通过。CEO最终全套323/323（51.25秒）是CEO执行结果，未冒称Alex重复全套。以下保留各阶段初始失败、修正和真实运行证据，不用历史中间通过覆盖当前门禁。本文不授权关闭尚未通过PM的Issue。
 
 ## 独立测试与发现闭环
 
@@ -31,21 +33,21 @@
 
 ## 逐项功能覆盖
 
-| Issue / AC | 独立验证范围 | 工程阶段判定 |
+| Issue / AC | 独立验证范围 | 最终Alex判定 |
 | --- | --- | --- |
-| #27 OI27-01/02 | 实际 API 错市场保护；817 任务第二页第32条展开、详情返回坐标误差 <4px；503 保留旧结果、全为 GET；全套另覆盖无关联/名称缺失 | 通过，待正式发布核对 |
-| #28 OI28-01/02 | 全套浏览器覆盖筛选空/全空/503区别、查看全部；独立503不变空态 | 通过，待正式发布核对 |
-| #29 OI29-01/02 | 全套事件历史2012年/date-only/非法日期、负时区；真实副本在 America/Mexico_City 查看历史日期 | 通过，待正式发布核对 |
-| #30 OI30-01/02 | 真实 TH ihappyloan 原文 `10 ส.ค. 2564` → 2021-08-10/date；无原文与待解析边界及非法值回归 | 通过，待正式发布核对 |
-| #31 OI31-01/02 | 原小时窗口和跨年窗口、乱序观测、null/0/单点/空、390；北京时间显式 | 通过，待正式发布核对 |
-| #32 OI32-01/02 | 两商店 easypaisa 原描述及真实 offset、32–40 上限40；详情与比较共享证据，重分析源时间/事务边界 | 工程通过；OI32-03 正式重分析待验 |
-| #33 OI33-01/02 | 真实 ID Kredivo 原更新说明与纯文本展示 SHA 分开；br/实体/Unicode/普通比较/恶意标记不执行，原 raw 可见 | 通过，待正式发布核对 |
-| #34 OI34-01/02 | 来源21–40展开、未提交 draft、侧栏返回；独立快慢 query 竞态不回填旧身份；无采集写请求 | 通过，待正式发布核对 |
-| #41 OI41-01/02 | 两周期同 app 不合并，null 失败时间不造；UI current 与 recent-cross-cycle 分明、详情返回 | 通过，待正式发布核对 |
-| #44 OI44-01/02 | 真实 PH PeraMoo 20变化字段；390 与817、桌面夹具旧/新/评分人数、null/0/对象/未知字段和对齐 | 通过，待正式发布核对 |
-| #45 OI45-01/02 | 真实 Maya 15% 为 non-loan，贷款条款不含储蓄；SAVE/BORROW、APY 和周期反例 | 工程通过；OI45-03 正式重分析待验 |
-| #46 OI46-01/02 | 真实 PK Apple6746167029 当前null、2026-09-06历史成功隐私链接和来源可见；当前链接优先/错市场/错app/无成功/危险URL拒绝 | 通过，待正式发布核对 |
-| #47 OI47-01/02 | 客户隔离HTTP/SQLite冻结全行CSV；真实副本 GCash 五市场1997字节文件成功下载，unknown/待细分/来源明确 | 通过，待正式发布核对 |
+| #27 OI27-01/02 | 实际 API 错市场保护；817 任务第二页第32条展开、详情返回坐标误差 <4px；503 保留旧结果、全为 GET；全套另覆盖无关联/名称缺失 | 通过；正式必要核对已完成 |
+| #28 OI28-01/02 | 全套浏览器覆盖筛选空/全空/503区别、查看全部；独立503不变空态 | 通过；正式必要核对已完成 |
+| #29 OI29-01/02 | 全套事件历史2012年/date-only/非法日期、负时区；真实副本在 America/Mexico_City 查看历史日期 | 通过；正式必要核对已完成 |
+| #30 OI30-01/02 | 真实 TH ihappyloan 原文 `10 ส.ค. 2564` → 2021-08-10/date；无原文与待解析边界及非法值回归 | 通过；正式必要核对已完成 |
+| #31 OI31-01/02 | 原小时窗口和跨年窗口、乱序观测、null/0/单点/空、390；北京时间显式 | 通过；正式必要核对已完成 |
+| #32 OI32-01/02 | 两商店 easypaisa 原描述及真实 offset、32–40 上限40；详情与比较共享证据，重分析源时间/事务边界 | 通过；OI32-03正式维修与源时间核对完成 |
+| #33 OI33-01/02 | 真实 ID Kredivo 原更新说明与纯文本展示 SHA 分开；br/实体/Unicode/普通比较/恶意标记不执行，原 raw 可见 | 通过；正式必要核对已完成 |
+| #34 OI34-01/02 | 来源21–40展开、未提交 draft、侧栏返回；独立快慢 query 竞态不回填旧身份；无采集写请求 | 通过；正式必要核对已完成 |
+| #41 OI41-01/02 | 两周期同 app 不合并，null 失败时间不造；UI current 与 recent-cross-cycle 分明、详情返回 | 通过；正式必要核对已完成 |
+| #44 OI44-01/02 | 真实 PH PeraMoo 20变化字段；390 与817、桌面夹具旧/新/评分人数、null/0/对象/未知字段和对齐 | 通过；正式必要核对已完成 |
+| #45 OI45-01/02 | 真实 Maya 15% 为 non-loan，贷款条款不含储蓄；SAVE/BORROW、APY 和周期反例 | 通过；OI45-03正式维修与源时间核对完成 |
+| #46 OI46-01/02 | 真实 PK Apple6746167029 当前null、2026-09-06历史成功隐私链接和来源可见；当前链接优先/错市场/错app/无成功/危险URL拒绝 | 通过；正式必要核对已完成 |
+| #47 OI47-01/02 | 客户隔离HTTP/SQLite冻结全行CSV；真实副本 GCash 五市场1997字节文件成功下载，unknown/待细分/来源明确 | 通过；正式必要核对已完成 |
 
 全套同时保留原鉴权、租户隔离、只读、缓存范围撤销、15秒仅检测、冻结清单/CSV、历史返回和评论解析回归。本轮不以截图替代服务端权限测试。
 
@@ -127,3 +129,142 @@ Alex另写并执行`alex-related-live-replay.ts`：主键/任务索引点查后�
 ## #49 独立工程回归（等待正式自检完成）
 
 目前新增`tests/alex-open-issues-runtime.test.ts` **4/4**：既有seen精确初始化、多batch与同ID不同App、重复初始化和文件重开、INSERT OR IGNORE不增数、DELETE/跨batch UPDATE与冲突拒绝、业务事务回滚、首建计数失败时表/trigger原子回滚，以及summary全对象等值/不写库/不再扫描seen表。日志`alex-runtime-counter-tests.log`。这只是当前实现的独立有界测试，尚不替代CTO最终冻结/完整受影响回归和RUN03正式65秒采样。
+
+三模块CTO正式冻结后，Alex独立最终受影响组合 **99/99**（3.523秒）、`npm run typecheck`及owned diff检查通过：`alex-runtime-final-affected.log` / `alex-runtime-final-typecheck.log`。包含4项Alex新计数边界、市场3项/诊断5项/summary1项，以及原批次、小时、manual、权限/快照和只读status检查。另审阅诊断metadata分页→仅页内raw读取、旧/新全返回等值oracle、市场全范围精选/各国最近事件、JSON原类型及首快照来源的实现，未发现新语义差异。
+
+**#49工程阶段已交“可受控部署”**；正式同collector65秒完整响应采样和诊断→详情→返回仍待RUN03/04，不将隔离数据的速度改善或99工程通过写成正式运行通过。Alex未覆盖正式dist、未操作collector。
+
+## #49 首次修复后的正式实测
+
+cb6ff99的**217个正式产物SHA与隔离release逐一一致**。独立审阅本次停机维护：107,490,242,560字节完整clone；初始化+独立原seen全COUNT校验共17.406秒（不是API耗时），结果7,378,102与Alex此前全量审计一致，重复初始化0.661毫秒；apps完整字段、国家、私有研究、2024成员和原历史高水位核对不变。Alex未重复扫描整个库，证据`alex-runtime-deployment-proof.json`。
+
+正式页面 **04:45:26.155–04:45:45.934Z，11项全部通过**，保持原10秒交互/30秒请求阈值。七个实际目标依次从诊断进入正确市场详情再返回，之前失败的PK GP1076和PH Maya1000均通过；两店APR上限40、储蓄非借款、历史隐私history8624原时间、Thai2021-08-10及原文、更新说明纯文本、20条前后变化均正确。390页面doc/viewport均390，实际冻结GCash CSV1997字节，页面错误0，业务操作均GET。关键390截图已独立查看；外部图片资源被测试context阻断，不当作源缺失。证据`alex-formal-ui.json`和`alex-formal-*.png`。
+
+**RUN03仍未通过**。并行同一collector PID93190的65.010秒窗口（04:45:25.187–04:46:30.200Z）中，每5秒交错14次首页/health：13次正确200；第4号首页请求04:45:45.191Z触及2秒硬中止（2003.8ms），恰与上述真实应用库搜索/CSV操作相邻。其余成功样本最慢1202.75ms。采样期间heartbeat推进，batch HTTP增加44、monitor HTTP增加2、discovery HTTP增加20，未停止collector。`alex-runtime-sampler-initial-library-overlap.*`保留整个失败窗口，不将其写成0超时；已交CEO定位剩余同步路径，不能由页面11项通过替代性能门禁。
+
+### RUN03剩余应用库读取补修：独立工程通过
+
+CTO再次冻结`libraryRows`补修后，Alex独立受影响组合 **43/43**（2.478秒）、前后端typecheck及owned diff检查通过。代码先按原国家/商店/类别/Unicode搜索语义筛选轻量身份，再只投影已入选行的展示字段；原贷款分析缺键undefined与显式null分别保留，原文发布日期/legacy fallback和固定CSV快照范围不改。独立复核了CTO旧模块全返回等值证据，未确认语义回归。
+
+日志`alex-runtime-library-affected.log` / `alex-runtime-library-typecheck.log`。已交可code-only受控发布结论；仍须在相同2秒硬阈值下重新取得包含真实应用库/CSV操作的65秒正式窗口，首轮超时不覆盖、不改写。
+
+## 最新正式版本52ca92b：RUN04通过，RUN03仍有一次超时
+
+CTO全套新增用例的国家负例原写死mx，偶然与fixture实际国家相同；只修为从明确fixture国家选择另一国家，产品源码未变。Alex独立再次运行市场4项全部通过（0.923秒），日志`alex-runtime-library-fixture-final.log`；旧失败日志由CTO保留。随后CEO323/323全套通过并code-only发布，不再做数据库维护。
+
+Alex独立比较`library-installed.json`、隔离release和当前dist，**217文件全等、error0**，见`alex-runtime-library-deployment-proof.json`。正式浏览器于**04:58:31.538–04:58:42.797Z**完成同11项诊断→正确市场详情→返回/390/GCash冻结CSV检查，全部通过、JS error0。原cb6的通过文件另保留`alex-formal-ui-cb6-pass.*`，没有覆盖先前失败证据。
+
+但并行RUN03在**04:58:30.526–04:59:35.542Z，65.011秒**仍未通过：第一条首页完整响应在**2005.4ms**被2秒硬中止；其余13条200，最大924.2ms，完整样本均保留。PID97262、nonce前后相同，heartbeat由04:58:23.736推进至04:59:35.431；monitor HTTP增加52、discovery HTTP增加8。本次未产生新的batch评论HTTP，因为该批次此时已全部终态，不将其误写为collector停止。
+
+原始记录`alex-runtime-sampler-final.*`，另存不可混淆副本`alex-runtime-sampler-library-second-failure.*`。这一条发生在浏览器初始访问/登录首页时段，尚未进入最后GCash CSV，不能未经定位断言仍是CSV原因。已交CEO/CTO继续定位，Alex未调高超时或自行重启/停止collector。
+
+## #11 165流最终有限恢复与逐源诊断
+
+**04:55:03.418–04:55:04.301Z**，独立只读增量确认165个授权流全部failed，52,582成功页保持，queued/running/deferred均0；本轮无新增batch response。原165身份、页码、请求语言、cursor与创建信息保持，**495原attempt和495原HTTP逐字段一致**。新manual37/job1318实际150条仍由独立源解析、完整raw/current/fetchedAt和持久receipt证明，未把该第一页替代任何旧续页流。记录`alex-review-recovery-final.json`与`alex-manual-review-source-final.json`。
+
+之后另以主键/索引读取495份新增HTTP和165个前序页，并关闭数据库后离线调用实际SDK，记录`alex-review-recovery-source-final.json` / `.log`：
+
+- 六国流数：ID59、MX43、PH15、AR24、TH10、PK14，共165。
+- **494份HTTP200**均从原body独立解析到唯一`UsvDTd`、payload为null、数值code **5**、`PlayDataError` detail `[1]`。这不是仅匹配task.error文案；没有混入未知布局、普通网络错误或伪合法空页。
+- 另**1份无status的aborted HTTP**明确归属task63014的受控中断attempt6；该流attempt4/5/7各为一次RPC5失败，共3次真实完成。没有删掉中断历史。
+- **164流各完成3次新失败**；task73493/app340/PK page217只有attempt4及6两次RPC5，attempt5于04:43:14.666–14.696受控中断且没有HTTP。累计attempt6不等于三次已完成请求；本报告明确列为2次来源拒绝+1中断，交PM决定此有限来源接受边界，不擅自补采或称165×3全部完成。
+- 每条新HTTP官方origin/path、POST、gl/hl、batch/task及attempt时间区间对应；每个失败页cursor与维护前原值、前一成功页nextCursor严格相同。安装SDK离线逐165输入确认生成UsvDTd请求含准确package和原cursor，URL/方法与已存HTTP相同，所有未知真实网络硬拒绝。
+- 历史HTTP journal未保存POST的`f.req`请求正文，因此这里明确区分“持久原上下文+真实URL/响应+离线SDK构造证明”与“历史POST字节抓包”，不冒称后者存在。未证实源端code5的具体业务含义，不能说应用下架或游标必然过期。
+
+逐源审计**未解释差异0**，全部成功历史的52,582页/7,378,102 seen/27,003原身份和完整写入时间线已在前述clone全量核对通过；此次只补维护后小增量，没有重扫107GB。可将#11交PM评估限定来源终止，不可宣称获取商店全部评论。最终整体验收仍须等待#49通过。
+
+### OI11-05 六国双店终态矩阵
+
+从已通过的逐流全量审计直接汇总；维护后无新增batch成功页，165失败保原身份/页码。自然终止分为无next-token与合法空，不能与source拒绝合并。表中“失败”均为本轮仍保failed的RPC5续页来源限制；此前补充采集的2个partial和12个失败另见已验收补充报告，未被评论阶段覆盖成成功。
+
+| 国家/商店 | 流 | 全部页 | 成功页 | 无next-token | 合法空终止 | Apple10页上限 | failed流 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| AR / Apple | 206 | 575 | 575 | 0 | 180 | 26 | 0 |
+| AR / GP | 196 | 7748 | 7724 | 164 | 8 | 0 | 24 |
+| ID / Apple | 141 | 681 | 681 | 0 | 93 | 48 | 0 |
+| ID / GP | 142 | 11791 | 11732 | 72 | 11 | 0 | 59 |
+| MX / Apple | 258 | 999 | 999 | 0 | 202 | 56 | 0 |
+| MX / GP | 200 | 14757 | 14714 | 148 | 9 | 0 | 43 |
+| PH / Apple | 196 | 639 | 639 | 0 | 171 | 25 | 0 |
+| PH / GP | 142 | 6735 | 6720 | 122 | 5 | 0 | 15 |
+| PK / Apple | 155 | 273 | 273 | 0 | 149 | 6 | 0 |
+| PK / GP | 89 | 4299 | 4285 | 68 | 7 | 0 | 14 |
+| TH / Apple | 167 | 636 | 636 | 0 | 138 | 29 | 0 |
+| TH / GP | 132 | 3614 | 3604 | 113 | 9 | 0 | 10 |
+
+全局7,378,102去重身份按(app_id, external_id)核对；页内7,378,311记录不是去重用户人数。后续小增量原有identity未删、manual37完整150响应已单独对齐，不将两种分母相加冒充新增评论量。
+
+### #49 新定位的version读取/receipt增量
+
+CEO随后提供真实trace：enqueueDetails全候选UPDATE单次2.392/2.586秒，版本历史读取冷查询1.050/1.154秒与逐发现receipt重复getApp叠加。010新增与原表达式相同的snapshot版本覆盖索引，recordDiscovery只做原有存在性校验；Alex独立受影响14/14（0.612秒）通过，日志`alex-runtime-version-affected.log`。索引null排除、0/false/对象类型、同观测时间id顺序和原完整返回均保持；当前只代表工程验证，正式构建/维护/同collector RUN03仍待后续。
+
+## 2026-09-22 恢复工作：原证据完整性复核
+
+06:54:28Z，仅以已存文件与9月20日SHA锚点交叉复核，不连接正式库、不重新扫描107GB、不发商店请求。最终recovery、逐源code5诊断、manual源审计、完整时间线四份JSON均与原部署proof哈希相同；全历史HTTP引用jsonl哈希也与其原审计声明一致，error0。
+
+165终态、494份原UsvDTd/null/code5与1aborted、164流各3次完成和73493两次完成加无HTTP中断的边界均完整保留；旧495attempt/495HTTP及manual29/37证据互相一致。此处核实的是**9月20日实际审计记录的完整性**，没有将历史状态冒称为9月22日重新读取的运行状态。新记录为`.artifacts/issues-20260920/alex-resume-sep22-review-evidence.json`。
+
+仍等待enqueueDetails补修的CTO冻结交接，随后独立验证010/recordDiscovery及队列同步受影响组合；正式部署后按原2秒、65秒、同collector推进条件再验RUN03。两次已发生的超时继续保留，尚不放行#49。
+
+随后在CEO恢复无trace原配置、服务ready后，**2026-09-22 06:57:25.456–06:57:26.031Z**完成当前只读小增量（0.575秒），证据`alex-sep22-review-checkpoint.json` / `.log`：
+
+- 原2024成员逐身份及batch candidate集合完全一致；165授权流仍全部failed，完整批次52,582成功、165失败，0 queued/running/deferred。
+- 495旧attempt、495旧HTTP逐字段不变；496新增attempt及495新增HTTP的来源、时间、状态、内容哈希与9月20日终审一致（包括两条受控interrupted记录，其中一条无HTTP）。
+- full_scan_responses高水位仍为73394，未新增batch成功页；manual29/37原收据hash/observedAt/appliedAt不变，id37之后没有新的已应用manual评论收据。
+- error0。正式库只做任务/HTTP/attempt/App主键核对及batch覆盖索引小聚合；旧attempt轻量metadata仅从不可变clone读取，未扫描评论正文或大response表。因而旧全量审计加本次增量可连续衔接，不冒称重新全扫208GB现库。#11仍按已说明的源限制交PM，#49运行门禁未被豁免。
+
+
+### 9月22日最终冻结：Alex受影响组合通过
+
+CTO正式冻结候选同步和轻量任务选择后，Alex独立代码/测试审核及受影响组合 **118/118（2.968秒）**、前后端typecheck、owned diff检查通过。命令包含`runtime-discovery/runtime-version/runtime-market/runtime-diagnostic`、Alex runtime/backend、原extended与Alex扩展发现、collection coordinator、hourly、fullscan、manual和研究空间API/快照/CSV权限测试；日志`alex-sep22-runtime-affected.log`和`alex-sep22-runtime-typecheck.log`。
+
+核实候选同步对null/wrong app关联、所有原状态、暂停国家和`last_fetched_at=''`仍保持原`IS NOT NULL`语义；第二次无变化写入为0。任务选择只延后读取完整payload，原COALESCE创建/轮转时间、ID tie-break及161条完整出队顺序均与原查询一致，source/detail和预算行为未更改。010版本索引与receipt存在性查询也纳入此次组合。**工程无已知阻断，可受控部署；尚不替代正式RUN03/04。**
+
+CEO另报告最终全套329/329（48.167秒）和隔离218产物构建通过，属于CEO操作证据；Alex没有重复全套或写正式dist。后续浏览器复验改用独立`sep22/`证据目录，保留9月20日既有文件及其SHA锚点。
+
+
+## 9月22日正式1cf0eea：页面通过，RUN03保留阻断
+
+CEO受控维护的完整COW备份为208,853,356,544字节，010实际初始化25.361秒；已验证version查询使用`COVERING INDEX snapshots_app_version_time`。Alex审阅维护脚本对全apps字段/分类、countries、私有研究、2024cohort和各历史高水位的前后严格hash比较，均保持；这里是独立核查CEO维护证据，没有冒称Alex重扫208GB。正式218文件与staged的**raw-byte SHA逐一相同**，`alex-sep22-deployment-proof.json` error0。
+
+该proof同时保留一次审计编码纠正：CEO安装摘要的serverHash/clientHash由`sha(Buffer)`实际经`JSON.stringify(Buffer.toJSON())`计算。Alex初次按raw-byte比较会失败；随后按原脚本精确重现该编码一致，218逐文件仍另用真实raw-byte SHA，不跳字段也不改正式文件。
+
+正式浏览器 **07:05:57.123–07:06:19.029Z**：同11项检查全部通过，JS errors 0、业务请求全部GET，817/390目标详情返回保持正确国家/商店/身份；两店32–40上限、储蓄非借款、history8624原成功时间、泰国原文发布日期、说明纯文本和20项变化前后值均正确。两390页面均documentWidth=viewportWidth=390，历史隐私截图已亲看。CSV实际2345字节，保留当前冻结范围与unknown标签断言；当前持续新增市场资料，未机械要求等于9月20日1997字节。证据独立保存在`sep22/alex-formal-ui.json`及截图，未覆盖先前任何通过/失败文件。
+
+**RUN03仍未通过**：并发窗口 **07:05:56.372–07:07:01.385Z，共65.007秒**，每5秒14次交错请求。第1号health（约07:06:01）在2001.34ms超时，第4号首页（约07:06:16）在2001.85ms超时；其他12条正确200，最大942.75ms。样本0是首页正常41.37ms，不能将后续两个超时解释成首请求未ready。PID49023及nonce全窗相同，heartbeat从07:05:52.177推进至07:07:01.290，monitor HTTP/response各增加37；batch终态及当前discovery高水位未变。
+
+记录`alex-runtime-sampler-sep22.json` / `.log`。两个超时分别邻近初始市场页/首次诊断和应用库CSV热点；仅说明时间相关，不未经追踪归因。已交CEO/CTO继续定位，未延长原2秒、未停collector、未用前端页面通过替代运行门禁。当前不得最终关闭#49或据此宣称全部16项已交付。
+
+### 最后两个schedule空目标guard：独立工程回归
+
+CEO/CTO再次正式冻结后，Alex受影响组合**122/122（2.992秒）**及前后端typecheck通过，日志`alex-sep22-pause-guard-affected.log` / `alex-sep22-pause-guard-typecheck.log`。只在原事务内逐次查六国表是否存在enabled=0；有暂停国家仍执行原UPDATE及原跨cycle范围，running不改；没有缓存国家状态。全enabled时不访问大任务队列；恢复再暂停即时生效，事务失败仍回滚heartbeat和任务写入。
+
+该增量无DDL、不改调度预算或采集结果。CEO使用独立临时clone的无匹配UPDATE计时是隔离证据，不能替代正式2秒门槛。工程无新阻断，已交可code-only受控部署；正式复测仍待ready，前三次运行失败都保留。
+
+
+## 最终正式验收交接：7e2d745
+
+两个空目标guard发布后，Alex最后独立核查218个正式产物、staged及CEO安装manifest的**raw-byte SHA逐一一致**；精确源码HEAD为`7e2d7455010a3517feb00c32a5e4e2120ec2780f`。正式监听`127.0.0.1:3000`的IPv4进程与collector锁均为PID52666，原单writer配置恢复、没有SQL trace。另一个已知无关IPv6通配3000服务仍在，因此核查按明确IPv4端点+真实Appeye资源/JSON判定，没有将其算作第二个Appeye进程或向其提交凭据。初次不分监听family的唯一PID断言误报及其精确选择说明保留在proof。
+
+### RUN03 最终原门槛通过
+
+**2026-09-22 07:15:25.421–07:16:30.435Z，共65.009秒**。每5秒交错GET首页与health，各7次共14次，全部200且Appeye身份正确，**完整响应最大829.713ms、0超时**，原2秒硬中止未更改。PID52666及锁nonce整窗不变；heartbeat由07:15:25.225推进至07:16:29.397，monitor HTTP增加24、持久response增加443，分别报告而不把HTTP和收据当相同分母。原batch已终态、discovery当前无新增HTTP，不声称所有通道在本窗口都发了请求。
+
+证据`alex-runtime-sampler-sep22-pauseguard.json` / `.log`。采样与下面的正式市场首页、七个身份诊断/详情、应用库与CSV路径并行，覆盖实际已定位热点；没有暂停collector、扩大超时或只测空闲。前面三个失败窗口继续原样保留，不被本轮通过覆盖。本结论适用于本次规定窗口，不宣称永久响应上限或商店来源恢复。
+
+### RUN04 正式流程及产物通过
+
+**07:15:26.081–07:15:36.621Z**，正式浏览器11项检查全部通过，JS errors 0、业务交互全GET，登录/退出只用于本地会话。七目标均经真实发现诊断进入正确国家/商店详情并返回；APR范围/原offset、储蓄非借款、历史隐私真实time/source、Thai原文与date-only、原说明纯文本、20个变化字段前后值均正确。817与390视口、实际冻结CSV下载继续通过，无延长原10秒交互/30秒请求等待。
+
+本轮路径为`sep22-pauseguard/alex-formal-ui.json`与相应截图；9月20日和9月22日先前证据都未覆盖。最新CSV仍按当前冻结清单校验，不要求持续采集期间与旧日期的字节数相同。外部图片由隔离浏览器阻断，未将其当作商店截图源失败。
+
+最终汇总证据`.artifacts/issues-20260920/alex-final-sep22-proof.json`包含218文件SHA和19份关键证据SHA，error0；同时保留安装摘要Buffer编码与监听family两项审计器断言纠正，不把它们当产品缺陷或静默跳过字段。010受控维护及后续code-only安装归CEO执行，Alex独立审阅其前后逻辑hash/计划与实际产物，不冒称重复208GB整库扫描。
+
+| 最终范围 | Alex结论 | 明确边界 |
+| --- | --- | --- |
+| 原13项功能 | 工程及必要正式发布核对通过 | 独立夹具、真实资料副本、正式运行证据按执行者和时点分列 |
+| #24 | 原5失败证据保护、5新收据/14HTTP/380来源通过 | 两个100是SDK上限，不称全目录；离线SDK重放不算新采集 |
+| #11 OI11-01–05 | 原全历史审计+维护后源诊断+9月22日当前增量可按来源限制接受 | 165仍failed；494明确code5+1abort，73493两完成+一中断；不将第一页fresh150或code5误称全部抓完/游标必然过期 |
+| #49 RUN01–04 | 最后122独立工程、语义等值/维护、65秒与正式11流程通过 | 三轮原超时保留；不扩大为无限负载或永久性能保证 |
+
+Alex已正式交PM最终判定；无需再扫评论巨表、重跑无变化页面或改写生产状态来获得通过。
