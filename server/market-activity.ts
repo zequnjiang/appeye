@@ -86,6 +86,8 @@ export interface CollectionStatus {
     reviewFailed: number;
     lastProgressAt: string | null;
   } | null;
+  failureScope?: 'recent-cross-cycle';
+  failureLimit?: number;
   failures: Array<{
     id: number;
     kind: string;
@@ -93,6 +95,10 @@ export interface CollectionStatus {
     store: StoreName;
     appId: number | null;
     error: string;
+    failedAt?: string | null;
+    cycleId?: number;
+    cycleDueAt?: string | null;
+    cycleStartedAt?: string | null;
     attempts: number;
   }>;
 }
@@ -147,11 +153,16 @@ export function releaseEvidence(data: Record<string, any>) {
     : { releasedAt: null, releasedAtRaw: raw, releasedAtPrecision: 'unknown' as const };
 }
 
-export function getMarketActivity(
-  store: Store,
-  query: ActivityQuery = {},
-  now = new Date(),
-): MarketActivityResponse {
+// Keep the source JSON types (including unknown/invalid release values) while
+// avoiding the large store payload/HTTP/raw fields that this read model never uses.
+const activityData = `json_object(
+  'icon',data->'$.icon','version',data->'$.version',
+  'storeUpdatedAt',data->'$.storeUpdatedAt','url',data->'$.url',
+  'releaseNotes',data->'$.releaseNotes',
+  'storeData',json_object('released',data->'$.storeData.released','releaseDate',data->'$.storeData.releaseDate')
+)`;
+
+function collectMarketActivity(store: Store, query: ActivityQuery = {}, now = new Date()) {
   const window = activityWindow(query.date, query.timeZone, now);
   const limit = query.limit ?? 50,
     offset = query.offset ?? 0;
@@ -170,15 +181,17 @@ export function getMarketActivity(
       parts.push(`${key}=?`);
       params.push(query[key]!);
     }
+  if (query.appIds) {
+    parts.push('id IN (SELECT value FROM json_each(?))');
+    params.push(JSON.stringify(query.appIds));
+  }
   const apps = store.all(
-    `SELECT id,external_id,title,country,store,classification,data,first_seen_at,last_fetched_at FROM apps ${parts.length ? `WHERE ${parts.join(' AND ')}` : ''}`,
+    `SELECT id,external_id,title,country,store,classification,${activityData} data,first_seen_at,last_fetched_at FROM apps ${parts.length ? `WHERE ${parts.join(' AND ')}` : ''}`,
     ...params,
   );
   const events: MarketActivityEvent[] = [];
   const inWindow = (at: string | null) => !!at && at >= window.windowStart && at < window.windowEnd;
-  const allowedIds = query.appIds ? new Set(query.appIds) : null;
   for (const app of apps) {
-    if (allowedIds && !allowedIds.has(app.id)) continue;
     const current = JSON.parse(app.data),
       release = releaseEvidence(current);
     const base: MarketActivityEvent = {
@@ -204,7 +217,7 @@ export function getMarketActivity(
     };
     if (inWindow(app.first_seen_at)) {
       const first = store.one(
-        'SELECT id,data,observed_at FROM snapshots WHERE app_id=? ORDER BY observed_at,id LIMIT 1',
+        `SELECT id,${activityData} data,observed_at FROM snapshots WHERE app_id=? ORDER BY observed_at,id LIMIT 1`,
         app.id,
       );
       const data = first ? JSON.parse(first.data) : {};
@@ -253,7 +266,11 @@ export function getMarketActivity(
     for (const [key, rows] of groups) {
       const row = rows[0]!;
       const snapshot = row.snapshot_id
-        ? store.one('SELECT data FROM snapshots WHERE id=? AND app_id=?', row.snapshot_id, app.id)
+        ? store.one(
+            `SELECT ${activityData} data FROM snapshots WHERE id=? AND app_id=?`,
+            row.snapshot_id,
+            app.id,
+          )
         : undefined;
       const data = snapshot ? JSON.parse(snapshot.data) : {};
       const version = typeof data.version === 'string' ? data.version.trim() : '';
@@ -310,7 +327,7 @@ export function getMarketActivity(
         b.appId - a.appId ||
         b.id.localeCompare(a.id),
     );
-  return {
+  const response: MarketActivityResponse = {
     ...window,
     counts: count(events, true),
     eventCounts: count(events, false),
@@ -339,4 +356,25 @@ export function getMarketActivity(
         ? 'demo'
         : 'live',
   };
+  return { response, selected };
+}
+
+export function getMarketActivity(
+  store: Store,
+  query: ActivityQuery = {},
+  now = new Date(),
+): MarketActivityResponse {
+  return collectMarketActivity(store, query, now).response;
+}
+
+/** One event traversal serves the page, featured rows and each country's latest. */
+export function getMarketActivitySummary(
+  store: Store,
+  query: ActivityQuery = {},
+  now = new Date(),
+) {
+  const { response, selected } = collectMarketActivity(store, query, now);
+  const latest = new Map<string, MarketActivityEvent>();
+  for (const event of selected) if (!latest.has(event.country)) latest.set(event.country, event);
+  return { response, featuredEvents: selected.slice(0, 4), latest };
 }

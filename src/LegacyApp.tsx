@@ -39,6 +39,8 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { api, post, patch, query } from './api';
+import { ChangeComparison, sourceToText, releaseRaw, historicalPrivacy } from './display-evidence';
+import type { HistoricalPrivacyEvidence } from './display-evidence';
 import { External, Flag, storeSource, time as researchTime } from './ResearchUI';
 import {
   ClassificationNote,
@@ -65,7 +67,7 @@ import '@fontsource-variable/dm-sans';
 import '@fontsource-variable/manrope';
 import './styles.css';
 import { MarketActivity } from './MarketActivity';
-import { DiscoveryDiagnostics } from './DiscoveryDiagnostics';
+import { DiscoveryDiagnostics, defaultDiscoveryView } from './DiscoveryDiagnostics';
 import { useResource as useData, sessionQueries } from './use-resource';
 import {
   captureLibraryReading,
@@ -1069,8 +1071,8 @@ function Trend({
   metric: 'score' | 'minInstalls' | 'ratings';
 }) {
   const points = [...snapshots]
-    .filter((s) => typeof s.data[metric] === 'number')
-    .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+    .filter((s) => typeof s.data[metric] === 'number' && Number.isFinite(Date.parse(s.observedAt)))
+    .sort((a, b) => Date.parse(a.observedAt) - Date.parse(b.observedAt));
   if (points.length < 2)
     return (
       <div className="chart-empty">
@@ -1108,13 +1110,18 @@ function Trend({
           strokeLinejoin="round"
         />
         <text x="50" y="192">
-          {date(points[0].observedAt)}
+          {date(points[0].observedAt, true)}
         </text>
         <text x="760" y="192" textAnchor="end">
-          {date(points[points.length - 1].observedAt)}
+          {date(points[points.length - 1].observedAt, true)}
         </text>
       </svg>
-      <span>{points.length} 次有效观测 · 横轴为实际观测时间</span>
+      <div className="trend-window">
+        <time>{date(points[0].observedAt, true)}</time>
+        <span>至</span>
+        <time>{date(points[points.length - 1].observedAt, true)}</time>
+      </div>
+      <span>{points.length} 次有效观测 · 横轴为实际观测时间 · 北京时间 Asia/Shanghai（UTC+8）</span>
     </div>
   );
 }
@@ -1144,6 +1151,7 @@ export function AppDetail({
     reviews: Review[];
     rawDetail: unknown;
     enrichments: Enrichment[];
+    historicalPrivacy?: HistoricalPrivacyEvidence | null;
   }>(`/apps/${id}`, version);
   const [tab, setTab] = useState('overview'),
     [metric, setMetric] = useState<'score' | 'minInstalls' | 'ratings'>('score'),
@@ -1321,7 +1329,18 @@ export function AppDetail({
               <dl className="facts">
                 <div>
                   <dt>商店发布日期</dt>
-                  <dd>{date(app.releasedAt)}</dd>
+                  <dd>
+                    {app.releasedAt ? (
+                      date(app.releasedAt)
+                    ) : releaseRaw(app, data.rawDetail) != null ? (
+                      <>
+                        <span>已取得原文，日期待解析</span>
+                        <small>来源原文：{String(releaseRaw(app, data.rawDetail))}</small>
+                      </>
+                    ) : (
+                      '商店未提供'
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>本系统首次发现</dt>
@@ -1337,6 +1356,30 @@ export function AppDetail({
                   <dt>隐私协议</dt>
                   <dd>
                     <External url={app.privacyPolicy} />
+                    {!app.privacyPolicy &&
+                      (() => {
+                        const saved = historicalPrivacy(
+                          app,
+                          data.enrichments || [],
+                          data.historicalPrivacy,
+                        );
+                        return (
+                          saved && (
+                            <div className="historical-source-note">
+                              <p>当前详情未提供；历史补充资料有链接，未核验其当前有效性。</p>
+                              <External url={saved.url}>历史隐私协议</External>
+                              <small>
+                                成功观测：{date(saved.fetchedAt, true)} · 北京时间
+                                {saved.historyId != null && ` · 历史记录 #${saved.historyId}`}
+                              </small>
+                              <External url={saved.source}>当时商店来源</External>
+                              <button className="text-button" onClick={() => setTab('enrichments')}>
+                                查看权限与隐私资料
+                              </button>
+                            </div>
+                          )
+                        );
+                      })()}
                   </dd>
                 </div>
                 <div>
@@ -1352,7 +1395,9 @@ export function AppDetail({
                 首次发现仅表示本系统最早保存的可信发现时间，不代表在该市场首次上架。
               </div>
               <h3>本次更新说明</h3>
-              <p className="pre-wrap">{app.releaseNotes || '商店未提供更新说明。'}</p>
+              <p className="pre-wrap">
+                {app.releaseNotes ? sourceToText(app.releaseNotes) : '商店未提供更新说明。'}
+              </p>
             </section>
             <section className="panel padded">
               <h2>应用描述</h2>
@@ -1441,11 +1486,7 @@ function DetailChanges({ id, version }: { id: number; version: number }) {
                   <Badge tone="teal">{fields[c.field] || c.field}</Badge>
                   <time>{date(c.observedAt || c.createdAt, true)}</time>
                 </div>
-                <div className="diff-values">
-                  <pre>{val(c.oldValue)}</pre>
-                  <ArrowRight size={16} />
-                  <pre>{val(c.newValue)}</pre>
-                </div>
+                <ChangeComparison field={c.field} oldValue={c.oldValue} newValue={c.newValue} />
               </article>
             ))}
           </div>
@@ -1558,24 +1599,39 @@ function Reviews({
   );
 }
 
+export interface JobsViewState {
+  status: string;
+  offset: number;
+  expanded: number | null;
+}
+export const defaultJobsView: JobsViewState = { status: '', offset: 0, expanded: null };
 export function JobsPage({
+  view,
+  onViewChange,
+  onSelect,
   version,
   countries,
   onDiscover,
   onNotify,
   onChanged,
 }: {
+  view?: JobsViewState;
+  onViewChange?: React.Dispatch<React.SetStateAction<JobsViewState>>;
+  onSelect?: (id: number) => void;
   version: number;
   countries: Country[];
   onDiscover: () => void;
   onNotify: (s: string) => void;
   onChanged: () => void;
 }) {
-  const [status, setStatus] = useState(''),
-    [offset, setOffset] = useState(0),
-    [expanded, setExpanded] = useState<number | null>(null),
-    [busy, setBusy] = useState<number | null>(null);
-  useEffect(() => setOffset(0), [status]);
+  const [localView, setLocalView] = useState<JobsViewState>(defaultJobsView);
+  const { status, offset, expanded } = view || localView;
+  const setView = onViewChange || setLocalView;
+  const setStatus = (status: string) =>
+    setView((v) => ({ ...v, status, offset: 0, expanded: null }));
+  const setOffset = (offset: number) => setView((v) => ({ ...v, offset, expanded: null }));
+  const setExpanded = (expanded: number | null) => setView((v) => ({ ...v, expanded }));
+  const [busy, setBusy] = useState<number | null>(null);
   const { data, error, loading } = useData<{ jobs: Job[]; total: number }>(
     '/jobs' + query({ status, offset, limit: 20 }),
     version,
@@ -1651,7 +1707,7 @@ export function JobsPage({
                 <tbody>
                   {data.jobs.map((j) => (
                     <React.Fragment key={j.id}>
-                      <tr>
+                      <tr data-reading-id={`job-${j.id}`}>
                         <td>
                           <button
                             className="job-title"
@@ -1670,6 +1726,38 @@ export function JobsPage({
                             {j.store ? stores[j.store] : '两个商店'}
                             {j.appId ? ' · 应用 #' + j.appId : ''}
                           </small>
+                          {j.appId ? (
+                            <>
+                              <strong>{j.appTitle || j.externalId || '关联应用不可用'}</strong>
+                              <code className="job-identity">
+                                {j.externalId || '商店 ID 未取得'}
+                              </code>
+                              {j.externalId && (
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    void navigator.clipboard
+                                      .writeText(j.externalId!)
+                                      .then(() => onNotify('应用 ID 已复制'))
+                                      .catch(() => onNotify('无法复制，请选择应用 ID 文本复制'))
+                                  }
+                                >
+                                  复制应用 ID
+                                </button>
+                              )}
+                              {onSelect && j.externalId && (
+                                <button
+                                  className="text-button"
+                                  data-focus-key={`job-app-${j.id}`}
+                                  onClick={() => onSelect(j.appId!)}
+                                >
+                                  查看应用详情
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <small>按市场发现 · 无关联应用</small>
+                          )}
                         </td>
                         <td>
                           <Badge tone={j.status}>
@@ -1728,12 +1816,30 @@ export function JobsPage({
           </>
         ) : (
           <Empty
-            title="尚无采集任务"
-            description="选择一个国家开始发现，系统会保存任务状态与结果。"
+            title={
+              status
+                ? `当前没有${statuses[status] || status}的手动采集任务`
+                : offset > 0
+                  ? '当前页没有手动任务'
+                  : '尚无手动采集任务'
+            }
+            description={
+              status
+                ? '仅表示此手动任务筛选没有匹配；不代表小时监测或历史批次全部成功。'
+                : offset > 0
+                  ? '可以返回第一页查看已保存任务。'
+                  : '选择一个国家开始发现，系统会保存手动任务状态与结果。'
+            }
             action={
-              <button className="button secondary" onClick={onDiscover}>
-                创建发现任务
-              </button>
+              status || offset > 0 ? (
+                <button className="button secondary" onClick={() => setStatus('')}>
+                  查看全部手动任务
+                </button>
+              ) : (
+                <button className="button secondary" onClick={onDiscover}>
+                  创建发现任务
+                </button>
+              )
             }
           />
         )}
@@ -2108,7 +2214,17 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     [editCountry, setEditCountry] = useState<Country | null>(null),
     [toast, setToast] = useState(''),
     [appsView, setAppsView] = useState<AppsViewState>(defaultAppsView);
+  const [jobsView, setJobsView] = useState(defaultJobsView);
+  const [discoveryView, setDiscoveryView] = useState(defaultDiscoveryView);
+  const origin = useRef<{ page: string; y: number } | null>(null);
   const libraryReading = useRef<LibraryReading | null>(null);
+  useLayoutEffect(() => {
+    if (appId === null && origin.current?.page === page) {
+      const saved = origin.current;
+      origin.current = null;
+      requestAnimationFrame(() => window.scrollTo(0, saved.y));
+    }
+  }, [appId, page]);
   const { data: countryData, error: countryError } = useData<{ countries: Country[] }>(
     '/countries',
     version,
@@ -2130,6 +2246,12 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     { id: 'settings', label: '市场设置', icon: Settings2 },
   ];
   function navigate(p: string) {
+    if (appId !== null && origin.current?.page === p) {
+      setPage(p);
+      setAppId(null);
+      return;
+    }
+    origin.current = null;
     setPage(p);
     setAppId(null);
     window.history.replaceState(
@@ -2144,6 +2266,7 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
     window.scrollTo(0, 0);
   }
   function select(id: number) {
+    origin.current = { page, y: window.scrollY };
     if (page === 'apps' && appId === null) {
       const key =
         '/apps' +
@@ -2282,7 +2405,9 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
               key={appId}
               id={appId}
               version={version}
+              backLabel={`返回${nav.find((n) => n.id === origin.current?.page)?.label || '应用库'}`}
               onBack={() => {
+                setPage(origin.current?.page || 'apps');
                 if (libraryReading.current) libraryReading.current.restoreFocus = true;
                 setAppId(null);
               }}
@@ -2317,6 +2442,8 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
             />
           ) : page === 'discovery' ? (
             <DiscoveryDiagnostics
+              view={discoveryView}
+              onViewChange={setDiscoveryView}
               countries={countries}
               version={version}
               onSelect={select}
@@ -2324,6 +2451,9 @@ function Workspace({ session, onLogout }: { session: Session; onLogout: () => vo
             />
           ) : page === 'jobs' ? (
             <JobsPage
+              view={jobsView}
+              onViewChange={setJobsView}
+              onSelect={select}
               version={version}
               countries={countries}
               onDiscover={() => setModal('discover')}

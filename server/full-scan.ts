@@ -106,11 +106,43 @@ export function ensureFullScanSchema(store: Store) {
     CREATE INDEX IF NOT EXISTS full_scan_response_task_time ON full_scan_responses(task_id,observed_at,id);
     CREATE INDEX IF NOT EXISTS full_scan_http_batch ON full_scan_http(batch_id);
     CREATE INDEX IF NOT EXISTS full_scan_source_identity ON full_scan_sources(batch_id,country,store,external_id,discovery_id);
+    CREATE INDEX IF NOT EXISTS full_scan_source_market_time ON full_scan_sources(country,store,external_id,observed_at DESC,id DESC);
+    CREATE INDEX IF NOT EXISTS full_scan_candidate_summary ON full_scan_candidates(batch_id,verdict,app_id);
+    CREATE INDEX IF NOT EXISTS full_scan_candidate_market_time ON full_scan_candidates(country,store,external_id,observed_at DESC);
     CREATE INDEX IF NOT EXISTS full_scan_app_pages ON full_scan_tasks(batch_id,app_id,kind,page,status);
     CREATE INDEX IF NOT EXISTS full_scan_summary_covering ON full_scan_tasks(
       batch_id,kind,status,stop_reason,json_extract(result,'$.added'),json_extract(result,'$.updated')
     );
   `);
+  // Counting millions of seen identities on every progress tick blocks the API's
+  // synchronous SQLite connection. Backfill once; maintain the exact count in
+  // the same transaction as each identity change (ignored inserts do not fire).
+  const countsExist = !!store.one(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='full_scan_seen_counts'",
+  );
+  store.transaction(() => {
+    store.db.exec(`
+      CREATE TABLE IF NOT EXISTS full_scan_seen_counts (
+        batch_id TEXT PRIMARY KEY, review_count INTEGER NOT NULL CHECK(review_count>=0)
+      );
+      CREATE TRIGGER IF NOT EXISTS full_scan_seen_insert AFTER INSERT ON full_scan_review_seen BEGIN
+        INSERT INTO full_scan_seen_counts(batch_id,review_count) VALUES(NEW.batch_id,1)
+        ON CONFLICT(batch_id) DO UPDATE SET review_count=review_count+1;
+      END;
+      CREATE TRIGGER IF NOT EXISTS full_scan_seen_delete AFTER DELETE ON full_scan_review_seen BEGIN
+        UPDATE full_scan_seen_counts SET review_count=review_count-1 WHERE batch_id=OLD.batch_id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS full_scan_seen_move AFTER UPDATE OF batch_id ON full_scan_review_seen
+      WHEN OLD.batch_id<>NEW.batch_id BEGIN
+        UPDATE full_scan_seen_counts SET review_count=review_count-1 WHERE batch_id=OLD.batch_id;
+        INSERT INTO full_scan_seen_counts(batch_id,review_count) VALUES(NEW.batch_id,1)
+        ON CONFLICT(batch_id) DO UPDATE SET review_count=review_count+1;
+      END;
+    `);
+    if (!countsExist)
+      store.db.exec(`INSERT INTO full_scan_seen_counts(batch_id,review_count)
+        SELECT batch_id,COUNT(*) FROM full_scan_review_seen GROUP BY batch_id`);
+  });
 }
 
 export function createFullScanRunner(options: {
@@ -987,10 +1019,9 @@ export function createFullScanRunner(options: {
       ),
       sourceRows: store.one('SELECT COUNT(*) n FROM full_scan_sources WHERE batch_id=?', batchId)!
         .n,
-      reviewCount: store.one(
-        'SELECT COUNT(*) n FROM full_scan_review_seen WHERE batch_id=?',
-        batchId,
-      )!.n,
+      reviewCount:
+        store.one('SELECT review_count n FROM full_scan_seen_counts WHERE batch_id=?', batchId)
+          ?.n ?? 0,
       reviewWrites: store.one(
         "SELECT COALESCE(SUM(json_extract(result,'$.added')),0) added,COALESCE(SUM(json_extract(result,'$.updated')),0) updated FROM full_scan_tasks WHERE batch_id=? AND kind='reviews' AND status='succeeded'",
         batchId,

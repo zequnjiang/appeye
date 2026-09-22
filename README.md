@@ -108,6 +108,8 @@ FULL_SCAN_WORKER_STOPPED=true npx tsx scripts/full-scan.ts --batch-id finance-20
 
 要让小时监测与未完成的批次共同运行，停止独立 CLI 后启动 `NODE_ENV=production npm start`。服务自动恢复最近已有待执行任务、已冻结范围的批次；可用 `FULL_SCAN_BATCH_ID` 指定既有批次。协调器最多执行 3 个小时任务后给已就绪批次 1 个任务，再给手动队列 1 个任务；空队列让出槽位。所有路径共用全局 HTTP 限速和 iTunes 至少 3100 ms 的额外间隔。小时详情不自动派生评论或七类补充，小时发现也不扩张旧批次成员。
 
+进度中的已见评论身份数由 `full_scan_seen_counts` 精确维护：首次升级从原 `full_scan_review_seen` 汇总，此后通过同事务触发器更新，重复身份不增加计数。进度轮询不再反复扫描全部评论身份。首次初始化会读取完整身份索引，大库应先停采集、备份并安排维护窗口；不要手工改派生计数。审计仍直接核对原始身份账本。
+
 精确恢复特定失败页时，先停止服务并备份，使用带范围的维护命令。它保留旧尝试序号、响应和历史，仅给所选失败任务新的有限尝试预算；成功任务不重排，其他批次或错误类型的 ID 会拒绝：
 
 ```bash
@@ -153,3 +155,15 @@ V0.2 需求与验收：[需求 #7](https://github.com/zequnjiang/appeye/issues/7
 每小时监测的本机常驻部署、launchd示例与停止/恢复步骤见[本机服务操作](docs/operations/LOCAL-SERVICE.md)。模板本身不代表已安装服务；实际运行状态以部署报告和产品监测状态为准。
 
 静默刷新与扩展发现分别通过[#21](https://github.com/zequnjiang/appeye/issues/21)和[#22](https://github.com/zequnjiang/appeye/issues/22)跟踪。[正式部署证据](docs/reports/SILENT-DISCOVERY-DEPLOYMENT.md)、[前端PM验收](docs/reports/SILENT-REFRESH-PM.md)和[扩展发现PM验收](docs/reports/EXTENDED-DISCOVERY-PM.md)记录独立测试、目标真实补录及已知来源限制。
+
+### 已保存信贷证据修复
+
+2026-09-20 的识别修复将 APR 区间保存为上下限，并把明确储蓄收益标为非借款成本。既有分析可在停止唯一采集服务并完成一致性备份后执行：
+
+```bash
+npx tsx scripts/refresh-loan-evidence.ts --apply
+```
+
+维护命令持有采集器锁，不发网络请求；保留旧/新分析审计、原来源观测时间（未知仍未知），不修改应用有效分类、人工/legacy决定、首次发现、商店原文或客户摘录。旧分析绑定历史快照时使用该原快照；缺原来源时跳过并报告对应ID。再次运行同一规则版本不会重复改写。恢复服务后，正常采集和显式人工分类仍按原流程执行。
+
+应用库 CSV 的 `category` 是信贷细分，不是商店 Finance 类别。导出同时提供明确的 `loanCategory`（personal/other/unknown）、`loanCategoryLabel` 和 `loanCategorySource`，全部来自用户当前授权的冻结清单。

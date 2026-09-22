@@ -40,9 +40,10 @@ import {
   DiscoveryForm,
   AddAppForm,
   defaultAppsView,
+  defaultJobsView,
   type AppsViewState,
 } from './LegacyApp';
-import { DiscoveryDiagnostics } from './DiscoveryDiagnostics';
+import { DiscoveryDiagnostics, defaultDiscoveryView } from './DiscoveryDiagnostics';
 import { MarketActivity as CollectionMonitor } from './MarketActivity';
 import {
   MarketHome,
@@ -354,6 +355,9 @@ function Workspace({
     [group, setGroup] = useState<number | null>(null),
     [collection, setCollection] = useState<number | null>(null),
     [selected, setSelected] = useState<number[]>([]);
+  const [monitorExpanded, setMonitorExpanded] = useState(false);
+  const [jobsView, setJobsView] = useState(defaultJobsView);
+  const [discoveryView, setDiscoveryView] = useState(defaultDiscoveryView);
   const [candidateView, setCandidateView] = useState<AppsViewState>({
     ...defaultAppsView,
     classification: 'candidate',
@@ -428,6 +432,11 @@ function Workspace({
   };
   function navigate(page: Page) {
     if (!permitted(user, page)) return;
+    if (route.page === 'detail' && backStack.current.at(-1)?.route.page === page) {
+      back();
+      setMenu(false);
+      return;
+    }
     backStack.current = [];
     reading.current = null;
     restore.current = null;
@@ -645,6 +654,8 @@ function Workspace({
     />
   ) : route.page === 'discovery' ? (
     <DiscoveryDiagnostics
+      view={discoveryView}
+      onViewChange={setDiscoveryView}
       countries={countries}
       version={version}
       onSelect={select}
@@ -653,6 +664,9 @@ function Workspace({
   ) : route.page === 'jobs' ? (
     <>
       <JobsPage
+        view={jobsView}
+        onViewChange={setJobsView}
+        onSelect={select}
         version={version}
         countries={countries}
         onDiscover={() => setModal('discover')}
@@ -660,6 +674,8 @@ function Workspace({
         onChanged={changed}
       />
       <CollectionMonitor
+        scheduleOpen={monitorExpanded}
+        onScheduleOpenChange={setMonitorExpanded}
         countries={countries}
         version={version}
         onSelect={select}

@@ -1,3 +1,4 @@
+import { ChangeComparison, sourceToText, changeFieldLabels } from './display-evidence';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
@@ -105,7 +106,7 @@ export function EventRows({
               {e.type === 'observedUpdate'
                 ? (e.versionChanged ? '版本变化' : '资料变化') +
                   ' · ' +
-                  e.changes.map((c) => c.field).join('、')
+                  e.changes.map((c) => changeFieldLabels[c.field] || c.field).join('、')
                 : e.type === 'firstSeen'
                   ? '系统首次发现，与商店上架时间不同'
                   : '商店披露的发布日期'}{' '}
@@ -116,7 +117,20 @@ export function EventRows({
               {e.releasedAtPrecision === 'date' && e.type === 'storeRelease'
                 ? ' · 仅日期精度'
                 : ''}{' '}
-              · 观测 {time(e.observedAt, true)}
+              · 观测 {time(e.observedAt, true)} · 北京时间
+            </small>
+            <small>
+              商店发布：
+              {e.releasedAt
+                ? time(e.releasedAt, true)
+                : e.releasedAtRaw
+                  ? `已取得原文，日期待解析：${String(e.releasedAtRaw)}`
+                  : '未提供'}
+              {e.releasedAtPrecision === 'date'
+                ? ' · 仅日期精度'
+                : e.releasedAt
+                  ? ' · 北京时间'
+                  : ''}
             </small>
           </div>
           <div className="button-group">
@@ -740,22 +754,28 @@ export function SelectedEvent({ event }: { event: MarketActivityEvent }) {
       <h2>来自本次所选动态：{eventLabels[event.type]}</h2>
       <p>
         {time(event.eventAt || event.releasedAt, true)} · 原观测 {time(event.observedAt, true)} ·
-        快照 {event.snapshotId ?? '未关联'}
+        快照 {event.snapshotId ?? '未关联'} · 北京时间
+      </p>
+      <p>
+        商店发布：
+        {event.releasedAt
+          ? time(event.releasedAt, true)
+          : event.releasedAtRaw
+            ? `已取得原文，日期待解析：${String(event.releasedAtRaw)}`
+            : '未提供'}
+        {event.releasedAtPrecision === 'date'
+          ? ' · 仅日期精度'
+          : event.releasedAt
+            ? ' · 北京时间'
+            : ''}
       </p>
       <External url={event.sourceUrl}>查看该动态来源</External>
       {event.changes.map((c) => (
-        <div className="diff-values" key={c.id}>
-          <strong>{c.field}</strong>
-          <pre>
-            {typeof c.oldValue === 'string' ? c.oldValue : JSON.stringify(c.oldValue, null, 2)}
-          </pre>
-          <ArrowRight size={15} />
-          <pre>
-            {typeof c.newValue === 'string' ? c.newValue : JSON.stringify(c.newValue, null, 2)}
-          </pre>
-        </div>
+        <ChangeComparison key={c.id} field={c.field} oldValue={c.oldValue} newValue={c.newValue} />
       ))}
-      <p className="pre-wrap">{event.releaseNotes || '该观测未提供更新说明。'}</p>
+      <p className="pre-wrap">
+        {event.releaseNotes ? sourceToText(event.releaseNotes) : '该观测未提供更新说明。'}
+      </p>
     </section>
   );
 }

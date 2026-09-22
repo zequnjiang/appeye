@@ -1,7 +1,9 @@
+import { time as researchTime } from './ResearchUI';
+import { sourceToText } from './display-evidence';
 import { useEffect, useState } from 'react';
 import { patch } from './api';
 import { useResource } from './use-resource';
-import type { LoanAnalysis } from '../server/loan-identification';
+import type { LoanAnalysis, LoanEvidence } from '../server/loan-identification';
 import type { Enrichment } from '../server/types';
 import type { MarketApp } from './types';
 
@@ -45,6 +47,7 @@ const fieldLabels: Record<string, string> = {
   minRepaymentTerm: '最短还款期限',
   maxRepaymentTerm: '最长还款期限',
   maximumApr: '最高 APR',
+  savingsYield: '储蓄收益 · 非借款成本',
   maximumInterestRate: '最高普通利率',
   fees: '费用',
   representativeExample: '还款总成本示例',
@@ -60,7 +63,7 @@ const fieldLabels: Record<string, string> = {
   secpApproval: 'SECP 相关声明',
 };
 const formatTime = (time?: string | null) =>
-  time ? new Date(time).toLocaleString('zh-CN') : '尚未获取';
+  time ? researchTime(time, true) + ' · 北京时间' : '尚未获取';
 function safeLink(value: unknown): string | undefined {
   if (typeof value !== 'string') return;
   try {
@@ -218,27 +221,31 @@ export function LoanIntelligence({
               原文片段保留来源及位置，费用与利率不代表已完成完整性或合规核验。
             </p>
             <div className="evidence-grid">
-              {analysis.evidence.map((e) => (
-                <article className="evidence-card" key={e.id}>
-                  <header>
-                    <strong>{fieldLabels[e.field] || e.field}</strong>
-                    <span>
-                      {e.id} · {e.source} [{e.start}, {e.end})
-                    </span>
-                  </header>
-                  <blockquote>{e.text}</blockquote>
-                  {e.rateType && (
-                    <small>
-                      {e.rateType} · {e.numericValue} {e.unit}
-                    </small>
-                  )}
-                </article>
-              ))}
+              {analysis.evidence
+                .filter((e) => e.kind !== 'non-loan')
+                .map((e) => (
+                  <EvidenceCard evidence={e} key={e.id} />
+                ))}
             </div>
             {!analysis.evidence.length && (
               <p className="muted">当前描述未匹配到规则。可以手动确认分类。</p>
             )}
           </section>
+          {analysis.evidence.some((e) => e.kind === 'non-loan') && (
+            <section className="panel padded">
+              <h2>非借款证据 · 储蓄收益等</h2>
+              <p className="muted">
+                以下是储蓄或非贷款语境，不作为借款成本，也不用于贷款条款对比。
+              </p>
+              <div className="evidence-grid">
+                {analysis.evidence
+                  .filter((e) => e.kind === 'non-loan')
+                  .map((e) => (
+                    <EvidenceCard evidence={e} key={e.id} />
+                  ))}
+              </div>
+            </section>
+          )}
           <section className="panel padded">
             <h2>国别披露检查</h2>
             <p className="muted">
@@ -293,6 +300,37 @@ export function LoanIntelligence({
         </>
       )}
     </div>
+  );
+}
+
+export function EvidenceCard({ evidence: e }: { evidence: LoanEvidence }) {
+  return (
+    <article className="evidence-card">
+      <header>
+        <strong>{fieldLabels[e.field] || e.field}</strong>
+        <span>
+          {e.id} · {e.source} [{e.start}, {e.end})
+        </span>
+      </header>
+      <blockquote>{e.text}</blockquote>
+      {e.rateType && (
+        <small>
+          {e.kind === 'non-loan' ? '非借款成本' : e.rateType === 'apr' ? 'APR' : '利率声明'} ·{' '}
+          {e.rateType}
+          {e.numericMin != null && e.numericMax != null
+            ? ` · 范围 ${e.numericMin}–${e.numericMax} ${e.unit || ''}`
+            : e.numericValue != null
+              ? ` · ${e.numericValue} ${e.unit || ''}`
+              : ' · 数值待核对'}
+          {e.numericMin != null &&
+          e.numericMax != null &&
+          e.numericValue != null &&
+          e.field.startsWith('maximum')
+            ? ` · 声明上限 ${e.numericValue}`
+            : ''}
+        </small>
+      )}
+    </article>
   );
 }
 
@@ -431,7 +469,7 @@ function SupplementalSummary({ kind, data }: { kind: string; data: unknown }) {
                 <time>{String(entry.releaseDate || entry.date || '未提供日期')}</time>
               </summary>
               <p className="pre-wrap">
-                {String(entry.releaseNotes || entry.notes || '未提供更新说明')}
+                {sourceToText(entry.releaseNotes || entry.notes || '未提供更新说明')}
               </p>
             </details>
           );

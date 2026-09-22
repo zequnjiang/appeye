@@ -130,10 +130,13 @@ export function createHourlyRunner(options: HourlyOptions) {
     return store.transaction(() => {
       const time = stamp();
       store.run('UPDATE monitor_state SET heartbeat_at=? WHERE id=1', time);
-      store.run(
-        "UPDATE monitor_tasks SET status='skipped',finished_at=?,error='Country paused before automatic task started' WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
-        time,
-      );
+      // No task can match when all markets are enabled. Check the small country
+      // table within the same transaction before visiting the durable queue.
+      if (store.one('SELECT 1 FROM countries WHERE enabled=0 LIMIT 1'))
+        store.run(
+          "UPDATE monitor_tasks SET status='skipped',finished_at=?,error='Country paused before automatic task started' WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
+          time,
+        );
       finishCycle();
       let cycle = store.one("SELECT * FROM monitor_cycles WHERE status='running'");
       const due = store.one('SELECT next_due_at FROM monitor_state WHERE id=1')?.next_due_at;
@@ -600,8 +603,13 @@ export function getCollectionStatus(
           )!.n,
         }
       : null,
+    failureScope: 'recent-cross-cycle',
+    failureLimit: 20,
     failures: store.all(
-      "SELECT id,kind,country,store,app_id appId,error,attempts FROM monitor_tasks WHERE status='failed' ORDER BY id DESC LIMIT 20",
+      `SELECT t.id,t.kind,t.country,t.store,t.app_id appId,t.error,t.attempts,
+        t.finished_at failedAt,t.cycle_id cycleId,c.due_at cycleDueAt,c.started_at cycleStartedAt
+       FROM monitor_tasks t LEFT JOIN monitor_cycles c ON c.id=t.cycle_id
+       WHERE t.status='failed' ORDER BY t.finished_at DESC,t.id DESC LIMIT 20`,
     ) as CollectionStatus['failures'],
   };
 }

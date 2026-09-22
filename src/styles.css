@@ -3592,3 +3592,60 @@ label small,
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* Source comparisons retain their labels when long content or narrow screens stack. */
+.change-comparison {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.55fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid #e6edf2;
+  align-items: start;
+}
+.change-comparison > div {
+  min-width: 0;
+}
+.change-comparison span,
+.change-comparison-field code {
+  display: block;
+  font-size: 11px;
+  color: #677d91;
+  margin-bottom: 6px;
+}
+.change-comparison pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 10px;
+  background: #f5f8fa;
+  border-radius: 5px;
+}
+.historical-source-note {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.historical-source-note p {
+  margin: 0;
+}
+@media (max-width: 620px) {
+  .change-comparison {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+}
+.trend-window {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #455d74;
+}
+.job-identity {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

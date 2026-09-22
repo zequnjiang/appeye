@@ -1,8 +1,9 @@
-import googlePlay from '@mradex77/google-play-scraper';
+import googlePlay, { ParseError } from '@mradex77/google-play-scraper';
 import * as apple from '@perttu/app-store-scraper';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { normalizeDeveloperContinuation } from './developer-continuation.js';
+import { normalizeRelatedContinuation } from './related-continuation.js';
 import { decodeGoogleDeveloperId, googleDeveloperRequestUrl } from './developer-route.js';
 import { describeTransportError } from './transport-error.js';
 import {
@@ -33,6 +34,7 @@ export interface ScanPage<T> {
   nextCursor?: string | null;
   stopReason?: string;
   warnings?: unknown[];
+  compatibility?: unknown[];
   requestLanguage?: string | null;
   coverage?: {
     requestedLimit: number | null;
@@ -65,7 +67,12 @@ export interface ScanProvider {
       onItem?: (data: NormalizedApp, source: string) => void;
     },
   ): Promise<ScanPage<NormalizedApp>>;
-  related?(input: ProviderContext & { externalId: string }): Promise<ScanPage<NormalizedApp>>;
+  related?(
+    input: ProviderContext & {
+      externalId: string;
+      onItem?: (data: NormalizedApp, source: string, observedAt?: string) => void | Promise<void>;
+    },
+  ): Promise<ScanPage<NormalizedApp>>;
   app: Provider['app'];
   appWithPeers?(
     input: ProviderContext & { externalId: string; batchId: string; peerExternalIds: string[] },
@@ -644,29 +651,130 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
             : `https://apps.apple.com/${input.country}/app/id${encodeURIComponent(input.externalId)}`;
         if (!client.similar) return { data: [], raw: null, source, stopReason: 'unsupported' };
         const warnings: unknown[] = [];
+        const compatibility: unknown[] = [];
         let appleListingBody: string | undefined;
+        const captured: {
+          url: string;
+          method: string;
+          body: string;
+          status: number;
+          fetchedAt?: string;
+        }[] = [];
+        const streamed = new Set<string>();
+        let onItemError: unknown;
+        const emit = async (rows: unknown[]) => {
+          if (!input.onItem) return;
+          for (const row of rows) {
+            const data = normalizeApp(row as Record<string, unknown>, store);
+            if (streamed.has(data.externalId)) continue;
+            try {
+              await input.onItem(data, source, captured.at(-1)?.fetchedAt);
+            } catch (error) {
+              onItemError = error;
+              throw error;
+            }
+            streamed.add(data.externalId);
+          }
+        };
+        const emitCaptured = async () => {
+          if (store !== 'google-play' || !input.onItem || captured.length < 2) return;
+          // similar() has no iterator. Before its next real HTTP, reuse its installed
+          // parser on already-journaled responses; the missing page raises ParseError
+          // so SDK returns the known prefix. Replay never uses real transport,
+          // invents rows, consumes budget, or creates a new HTTP observation.
+          let cursor = 0;
+          let rows: unknown[];
+          try {
+            rows = await googlePlay.similar({
+              appId: input.externalId,
+              country: input.country,
+              lang: input.language,
+              fullDetail: false,
+              requestOptions: {
+                timeoutMs,
+                retries: 0,
+                fetchImpl: async (url, init) => {
+                  const saved = captured[cursor++];
+                  if (
+                    !saved ||
+                    saved.url !== String(url) ||
+                    saved.method !== (init?.method ?? 'GET')
+                  )
+                    throw new ParseError('Appeye captured related prefix ends before this request');
+                  return new Response(saved.body, { status: saved.status });
+                },
+              },
+            });
+          } catch {
+            return;
+          }
+          await emit(rows);
+        };
         const relatedFetch: typeof fetch = async (url, init) => {
+          await emitCaptured();
           const response = await fetcher(url, init);
           const requestUrl = url instanceof Request ? url.url : String(url);
+          const parsedUrl = new URL(requestUrl);
+          const original =
+            transportSources.get(response)?.record.body ?? (await response.clone().text());
+          const saved = {
+            url: requestUrl,
+            method: init?.method ?? (url instanceof Request ? url.method : 'GET'),
+            body: original,
+            status: response.status,
+            fetchedAt: transportSources.get(response)?.record.fetchedAt,
+          };
+          if (store === 'google-play') captured.push(saved);
+          if (
+            store === 'google-play' &&
+            response.ok &&
+            parsedUrl.origin === 'https://play.google.com' &&
+            parsedUrl.pathname === '/_/PlayStoreUi/data/batchexecute' &&
+            parsedUrl.searchParams.get('rpcids') === 'qnKhOb'
+          ) {
+            const metadata = transportSources.get(response);
+            const normalized = normalizeRelatedContinuation(original);
+            if (normalized.warning)
+              warnings.push({ ...normalized.warning, sourceHttpId: metadata?.httpId ?? null });
+            if (normalized.adaptation) {
+              saved.body = normalized.body;
+              compatibility.push({
+                ...normalized.adaptation,
+                sourceHttpId: metadata?.httpId ?? null,
+                sourceFetchedAt: metadata?.record.fetchedAt ?? null,
+                originalHttpPreserved: true,
+              });
+              return new Response(normalized.body, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: { 'content-type': 'application/json; charset=utf-8' },
+              });
+            }
+          }
           if (store === 'app-store' && requestUrl === source && response.ok)
             appleListingBody =
               transportSources.get(response)?.record.body ?? (await response.clone().text());
           return response;
         };
-        const raw = await client.similar({
-          ...context(input),
-          ...(store === 'google-play'
-            ? { appId: input.externalId }
-            : { id: Number(input.externalId) }),
-          fullDetail: false,
-          onDegradation: (event: unknown) => warnings.push(event),
-          onIntegrityEvent: (event: unknown) => warnings.push(event),
-          requestOptions:
-            store === 'google-play'
-              ? { timeoutMs, retries: 0, signal: input.signal, fetchImpl: relatedFetch }
-              : { timeout: timeoutMs, retries: 0, signal: input.signal, fetch: relatedFetch },
-        });
+        const raw = await client
+          .similar({
+            ...context(input),
+            ...(store === 'google-play'
+              ? { appId: input.externalId }
+              : { id: Number(input.externalId) }),
+            fullDetail: false,
+            onDegradation: (event: unknown) => warnings.push(event),
+            onIntegrityEvent: (event: unknown) => warnings.push(event),
+            requestOptions:
+              store === 'google-play'
+                ? { timeoutMs, retries: 0, signal: input.signal, fetchImpl: relatedFetch }
+                : { timeout: timeoutMs, retries: 0, signal: input.signal, fetch: relatedFetch },
+          })
+          .catch((error: unknown) => {
+            throw onItemError ?? error;
+          });
         if (!Array.isArray(raw)) throw new Error('Related apps response is not an array');
+        await emit(raw);
         // Apple collects every app link on this page, not a verified recommendation shelf.
         // An unrecognized HTTP200 page (challenge/error/layout change) is not an empty catalog.
         if (
@@ -683,6 +791,7 @@ export function createFullScanProviders(options: FullScanProviderOptions = {}): 
           raw,
           source,
           warnings,
+          compatibility,
           // GP reads the seed in English then clusters in the requested language; Apple
           // reads a storefront page then en_us lookup. Exact languages remain in HTTP URLs.
           requestLanguage: null,

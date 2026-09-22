@@ -114,6 +114,8 @@ export interface Job {
   country: string;
   store: StoreName;
   appId: number | null;
+  appTitle: string | null;
+  externalId: string | null;
   attempts: number;
   maxAttempts: number;
   progress: string | null;

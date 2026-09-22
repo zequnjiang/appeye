@@ -404,7 +404,7 @@ export class Store {
       observedAt?: string;
     },
   ): DiscoveryObservation {
-    if (!this.getApp(appId)) throw new Error('App not found');
+    if (!this.one('SELECT id FROM apps WHERE id=?', appId)) throw new Error('App not found');
     const observedAt = input.observedAt ?? now();
     const result = this.run(
       'INSERT INTO discovery_observations(app_id,observed_at,keyword,request_country,request_language,source,data,raw) VALUES (?,?,?,?,?,?,?,?)',
@@ -558,6 +558,40 @@ export class Store {
       error: r.error,
       note: r.note,
     }));
+  }
+  historicalPrivacy(appId: number) {
+    const app = this.getApp(appId);
+    if (!app) return null;
+    // A later successful empty result must not erase an older observed link.
+    // Read the indexed app/kind history without loading unrelated raw responses.
+    const rows = this.db
+      .prepare(
+        `SELECT id,fetched_at,source,request_country,request_language,data
+       FROM enrichment_history WHERE app_id=? AND kind='privacy' AND status='available'
+       AND lower(request_country)=? ORDER BY fetched_at DESC,id DESC`,
+      )
+      .iterate(appId, app.country.toLowerCase());
+    for (const row of rows) {
+      const data = parse(row.data);
+      const value = data?.privacyPolicyUrl;
+      if (typeof value !== 'string') continue;
+      try {
+        const url = new URL(value);
+        if (!['http:', 'https:'].includes(url.protocol)) continue;
+        return {
+          appId,
+          url: url.href,
+          source: row.source as string,
+          fetchedAt: row.fetched_at as string,
+          requestCountry: row.request_country as string,
+          requestLanguage: row.request_language as string,
+          historyId: row.id as number,
+        };
+      } catch {
+        // Invalid URLs remain in the original history but are not clickable.
+      }
+    }
+    return null;
   }
   listEnrichmentHistory(
     appId: number,
@@ -837,6 +871,8 @@ export class Store {
       country: r.country,
       store: r.store,
       appId: r.app_id,
+      appTitle: r.app_title ?? null,
+      externalId: r.external_id ?? null,
       attempts: r.attempts,
       maxAttempts: r.max_attempts,
       progress: r.progress,
@@ -849,7 +885,10 @@ export class Store {
     };
   }
   getJob(id: number): Job | undefined {
-    const r = this.one('SELECT * FROM jobs WHERE id=?', id);
+    const r = this.one(
+      `SELECT j.*,a.title app_title,a.external_id FROM jobs j LEFT JOIN apps a ON a.id=j.app_id AND a.country=j.country AND a.store=j.store WHERE j.id=?`,
+      id,
+    );
     return r && this.jobRow(r);
   }
   listJobs(
@@ -865,18 +904,18 @@ export class Store {
     const params: SQLInputValue[] = [];
     for (const key of ['status', 'type', 'country'] as const)
       if (filters[key]) {
-        parts.push(`${key}=?`);
+        parts.push(`j.${key}=?`);
         params.push(filters[key]!);
       }
     const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
     return {
       jobs: this.all(
-        `SELECT * FROM jobs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+        `SELECT j.*,a.title app_title,a.external_id FROM jobs j LEFT JOIN apps a ON a.id=j.app_id AND a.country=j.country AND a.store=j.store ${where} ORDER BY j.id DESC LIMIT ? OFFSET ?`,
         ...params,
         filters.limit ?? 100,
         filters.offset ?? 0,
       ).map((r) => this.jobRow(r)),
-      total: this.one(`SELECT COUNT(*) n FROM jobs ${where}`, ...params)!.n,
+      total: this.one(`SELECT COUNT(*) n FROM jobs j ${where}`, ...params)!.n,
     };
   }
   claimJob(): Job | undefined {

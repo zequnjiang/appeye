@@ -60,6 +60,43 @@ export function expandedKeywords(country: { code: string; keywords: string[] }) 
 }
 const identityArgs = (r: Row) => [r.country, r.store, r.external_id] as [string, string, string];
 
+/** Reconcile every market, including paused countries, without rewriting admitted rows. */
+export function reconcileDiscoveryCandidates(store: Store) {
+  return store.run(`WITH matches AS MATERIALIZED (
+    SELECT c.id candidate_id,a.id app_id FROM apps a CROSS JOIN discovery_candidates c
+    WHERE a.last_fetched_at IS NOT NULL
+      AND c.country=a.country AND c.store=a.store AND c.external_id=a.external_id
+      AND (c.app_id IS NOT a.id OR c.status<>'admitted')
+  ) UPDATE discovery_candidates AS c SET app_id=matches.app_id,status='admitted'
+    FROM matches WHERE c.id=matches.candidate_id`);
+}
+
+/** Sort only task identities; fetch the durable payload after the same winner is known. */
+export function findQueuedDiscoveryTask(
+  store: Store,
+  cycleId: number,
+  country: string,
+  name: string,
+  detail: boolean,
+  sourceKind?: string,
+): Row | undefined {
+  return store.one(
+    `WITH picked AS MATERIALIZED (
+      SELECT t.id FROM discovery_tasks t
+      LEFT JOIN discovery_frontier f ON f.id=t.frontier_id
+      LEFT JOIN discovery_candidates c ON c.id=t.candidate_id
+      WHERE t.cycle_id=? AND t.country=? AND t.store=? AND t.status='queued'
+        AND ${detail ? "t.kind='detail'" : "t.kind<>'detail'"}
+        ${sourceKind ? 'AND t.kind=?' : ''}
+      ORDER BY COALESCE(c.last_served,c.created_at,f.last_served,f.created_at,''),t.id LIMIT 1
+    ) SELECT t.* FROM picked JOIN discovery_tasks t ON t.id=picked.id`,
+    cycleId,
+    country,
+    name,
+    ...(sourceKind ? [sourceKind] : []),
+  );
+}
+
 /** Sources may predate processing; every admission consults their original observation time. */
 function attachSources(store: Store, appId: number, identity: Row) {
   for (const row of store.all(
@@ -154,8 +191,7 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     );
   };
   function enqueueDetails(cycleId: number) {
-    store.run(`UPDATE discovery_candidates AS c SET app_id=(SELECT a.id FROM apps a WHERE a.country=c.country AND a.store=c.store AND a.external_id=c.external_id),status='admitted'
-      WHERE EXISTS(SELECT 1 FROM apps a WHERE a.country=c.country AND a.store=c.store AND a.external_id=c.external_id AND a.last_fetched_at IS NOT NULL)`);
+    reconcileDiscoveryCandidates(store);
     // All pending identities remain durable even when this cycle's detail quota is exhausted.
     store.run(
       `INSERT OR IGNORE INTO discovery_tasks(cycle_id,country,store,kind,candidate_id,payload,created_at)
@@ -289,10 +325,11 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     return store.transaction(() => {
       const time = stamp();
       store.run('UPDATE discovery_state SET heartbeat_at=? WHERE id=1', time);
-      store.run(
-        "UPDATE discovery_tasks SET status='deferred',stop_reason='country-paused',finished_at=? WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
-        time,
-      );
+      if (store.one('SELECT 1 FROM countries WHERE enabled=0 LIMIT 1'))
+        store.run(
+          "UPDATE discovery_tasks SET status='deferred',stop_reason='country-paused',finished_at=? WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
+          time,
+        );
       finishCycle();
       let cycle = store.one("SELECT * FROM discovery_cycles WHERE status='running'");
       const due = store.one('SELECT next_due_at FROM discovery_state WHERE id=1')?.next_due_at;
@@ -498,7 +535,14 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     }
     if (task.kind === 'similar') {
       if (!provider.related) return { data: [], raw: null, source: '', stopReason: 'unsupported' };
-      return provider.related({ ...context, externalId: payload.externalId });
+      return provider.related({
+        ...context,
+        externalId: payload.externalId,
+        onItem: (data, source, observedAt) => {
+          signal.throwIfAborted();
+          remember(task, data, source, observedAt ?? stamp(), data.raw ?? data, null);
+        },
+      });
     }
     if (!provider.extendedSearch)
       return { data: [], raw: null, source: '', stopReason: 'unsupported' };
@@ -616,14 +660,13 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
           );
         }
         const find = (sourceKind?: string) =>
-          store.one(
-            `SELECT t.* FROM discovery_tasks t LEFT JOIN discovery_frontier f ON f.id=t.frontier_id LEFT JOIN discovery_candidates c ON c.id=t.candidate_id
-          WHERE t.cycle_id=? AND t.country=? AND t.store=? AND t.status='queued' AND ${kind}
-          ${sourceKind ? 'AND t.kind=?' : ''} ORDER BY COALESCE(c.last_served,c.created_at,f.last_served,f.created_at,''),t.id LIMIT 1`,
+          findQueuedDiscoveryTask(
+            store,
             cycle.id,
             market.country,
             market.store,
-            ...(sourceKind ? [sourceKind] : []),
+            detail,
+            sourceKind,
           );
         let task: Row | undefined;
         if (detail) task = find();
@@ -929,34 +972,73 @@ export function discoveryIdentity(
     ...args,
   );
   const candidate = store.one(
-    'SELECT * FROM discovery_candidates WHERE country=? AND store=? AND external_id=?',
+    'SELECT id,status,error,analysis FROM discovery_candidates WHERE country=? AND store=? AND external_id=?',
     ...args,
   );
   const hasBatch = !!store.one("SELECT name FROM sqlite_master WHERE name='full_scan_sources'");
-  const sourceQueries = [
-    "SELECT 'extended' channel,id,kind,source,observed_at,processed_at,keyword,parent_app_id,enrichment_history_id,data,raw FROM discovery_sources WHERE country=? AND store=? AND external_id=?",
-    "SELECT 'hourly' channel,id,'hourly' kind,source,observed_at,observed_at processed_at,keyword,NULL parent_app_id,NULL enrichment_history_id,data,raw FROM monitor_sources WHERE country=? AND store=? AND external_id=?",
+  const sourceTables = [
+    {
+      channel: 'extended',
+      table: 'discovery_sources',
+      fields: 'kind,processed_at,parent_app_id,enrichment_history_id',
+    },
+    {
+      channel: 'hourly',
+      table: 'monitor_sources',
+      fields:
+        "'hourly' kind,observed_at processed_at,NULL parent_app_id,NULL enrichment_history_id",
+    },
     ...(hasBatch
       ? [
-          "SELECT 'batch' channel,id,'batch' kind,source,observed_at,observed_at processed_at,keyword,NULL parent_app_id,NULL enrichment_history_id,data,raw FROM full_scan_sources WHERE country=? AND store=? AND external_id=?",
+          {
+            channel: 'batch',
+            table: 'full_scan_sources',
+            fields:
+              "'batch' kind,observed_at processed_at,NULL parent_app_id,NULL enrichment_history_id",
+          },
         ]
       : []),
   ];
+  // Sort only index-sized metadata. Full raw/data may contain large store responses
+  // and must not be copied into a sorter for every historical source of an identity.
+  const sourceQueries = sourceTables.map(
+    ({ channel, table }) =>
+      `SELECT '${channel}' channel,id,observed_at FROM ${table} WHERE country=? AND store=? AND external_id=?`,
+  );
   const sourceArgs = sourceQueries.flatMap(() => args);
-  const sources = store.all(
-    `SELECT * FROM (${sourceQueries.join(' UNION ALL ')}) ORDER BY observed_at DESC,channel,id DESC LIMIT ? OFFSET ?`,
+  const sourcePage = store.all(
+    `SELECT channel,id,observed_at FROM (${sourceQueries.join(' UNION ALL ')}) ORDER BY observed_at DESC,channel,id DESC LIMIT ? OFFSET ?`,
     ...sourceArgs,
     identity.limit ?? 20,
     identity.offset ?? 0,
   );
+  const sources = sourcePage.map(({ channel, id }) => {
+    const definition = sourceTables.find((entry) => entry.channel === channel)!;
+    return store.one(
+      `SELECT '${channel}' channel,id,source,observed_at,keyword,${definition.fields},data,raw FROM ${definition.table} WHERE id=?`,
+      id,
+    )!;
+  });
+  // Resolve the two indexed identity paths separately, then read only the final
+  // twenty task metadata rows. The old OR scanned tasks for the whole market.
+  const extendedIds = store.all(
+    `SELECT id FROM (
+      SELECT id FROM discovery_tasks WHERE candidate_id=? AND country=? AND store=?
+      UNION
+      SELECT t.id FROM discovery_sources s JOIN discovery_tasks t ON t.id=s.task_id
+      WHERE s.country=? AND s.store=? AND s.external_id=? AND t.country=? AND t.store=?
+    ) ORDER BY id DESC LIMIT 20`,
+    candidate?.id ?? -1,
+    identity.country,
+    identity.store,
+    ...args,
+    identity.country,
+    identity.store,
+  );
   const tasks = store
     .all(
-      `SELECT t.* FROM discovery_tasks t WHERE t.country=? AND t.store=? AND
-    (t.candidate_id=? OR t.id IN (SELECT task_id FROM discovery_sources WHERE country=? AND store=? AND external_id=?)) ORDER BY t.id DESC LIMIT 20`,
-      identity.country,
-      identity.store,
-      candidate?.id ?? -1,
-      ...args,
+      `SELECT id,kind,status,error,stop_reason FROM discovery_tasks WHERE id IN (${extendedIds.map(() => '?').join(',') || 'NULL'}) ORDER BY id DESC`,
+      ...extendedIds.map((entry) => entry.id),
     )
     .map((t) => ({
       id: t.id,
@@ -967,7 +1049,7 @@ export function discoveryIdentity(
       stopReason: t.stop_reason,
     }));
   for (const t of store.all(
-    'SELECT * FROM monitor_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
+    'SELECT id,kind,status,error,result FROM monitor_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
     ...args,
   ))
     tasks.push({
@@ -981,7 +1063,7 @@ export function discoveryIdentity(
     });
   if (store.one("SELECT name FROM sqlite_master WHERE name='full_scan_tasks'"))
     for (const t of store.all(
-      'SELECT * FROM full_scan_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
+      'SELECT id,kind,status,error,stop_reason FROM full_scan_tasks WHERE country=? AND store=? AND external_id=? ORDER BY id DESC LIMIT 10',
       ...args,
     ))
       tasks.push({
@@ -994,7 +1076,7 @@ export function discoveryIdentity(
       });
   if (app)
     for (const j of store.all(
-      'SELECT * FROM jobs WHERE app_id=? ORDER BY id DESC LIMIT 10',
+      'SELECT id,type,status,error FROM jobs WHERE app_id=? ORDER BY id DESC LIMIT 10',
       app.id,
     ))
       tasks.push({
@@ -1041,10 +1123,15 @@ export function discoveryIdentity(
     error: app?.last_error ?? candidate?.error ?? null,
     analysis: parse(app?.loan_analysis ?? candidate?.analysis ?? batchCandidate?.analysis ?? null),
     tasks,
-    sourceTotal: store.one(
-      `SELECT COUNT(*) n FROM (${sourceQueries.join(' UNION ALL ')})`,
-      ...sourceArgs,
-    )!.n,
+    sourceTotal: sourceTables.reduce(
+      (total, { table }) =>
+        total +
+        store.one(
+          `SELECT COUNT(*) n FROM ${table} WHERE country=? AND store=? AND external_id=?`,
+          ...args,
+        )!.n,
+      0,
+    ),
     sources: sources.map((s) => ({
       id: `${s.channel}:${s.id}`,
       kind: s.kind,
