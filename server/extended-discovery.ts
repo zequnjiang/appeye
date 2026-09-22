@@ -325,10 +325,11 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     return store.transaction(() => {
       const time = stamp();
       store.run('UPDATE discovery_state SET heartbeat_at=? WHERE id=1', time);
-      store.run(
-        "UPDATE discovery_tasks SET status='deferred',stop_reason='country-paused',finished_at=? WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
-        time,
-      );
+      if (store.one('SELECT 1 FROM countries WHERE enabled=0 LIMIT 1'))
+        store.run(
+          "UPDATE discovery_tasks SET status='deferred',stop_reason='country-paused',finished_at=? WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
+          time,
+        );
       finishCycle();
       let cycle = store.one("SELECT * FROM discovery_cycles WHERE status='running'");
       const due = store.one('SELECT next_due_at FROM discovery_state WHERE id=1')?.next_due_at;

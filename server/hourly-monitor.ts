@@ -130,10 +130,13 @@ export function createHourlyRunner(options: HourlyOptions) {
     return store.transaction(() => {
       const time = stamp();
       store.run('UPDATE monitor_state SET heartbeat_at=? WHERE id=1', time);
-      store.run(
-        "UPDATE monitor_tasks SET status='skipped',finished_at=?,error='Country paused before automatic task started' WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
-        time,
-      );
+      // No task can match when all markets are enabled. Check the small country
+      // table within the same transaction before visiting the durable queue.
+      if (store.one('SELECT 1 FROM countries WHERE enabled=0 LIMIT 1'))
+        store.run(
+          "UPDATE monitor_tasks SET status='skipped',finished_at=?,error='Country paused before automatic task started' WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)",
+          time,
+        );
       finishCycle();
       let cycle = store.one("SELECT * FROM monitor_cycles WHERE status='running'");
       const due = store.one('SELECT next_due_at FROM monitor_state WHERE id=1')?.next_due_at;

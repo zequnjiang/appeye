@@ -148,3 +148,17 @@ CEO后续全套运行在新增 library 专项出现1个失败（保留 `.artifac
 - 首轮新专项3/4通过，唯一失败是测试展开成普通对象后与SQLite的 null-prototype 行直接做严格原型比较，业务字段及选择顺序无差异。已将双方都显式投影为普通对象，产品代码未为此修改；原输出 `.artifacts/runtime-discovery-tests.log` 保留。
 
 源码和专项已冻结交Alex独立验证。正式RUN03仍需由CEO完成同一唯一collector持续推进时的新窗口，并经Alex/PM验收；本段不将确定性30项或备份深等当作正式响应门禁通过。
+
+### 同日 RUN03 仍失败后的空暂停目标扫描补修
+
+部署 `1cf0eea` 后，正式11条流程再次通过，但新65秒窗口14请求仍有2次硬超时（07:06:01 health约2001ms、07:06:16首页约2002ms）。同窗口 monitor HTTP/response各推进37条，discovery没有HTTP推进，因此不能将此前候选同步修复当作已覆盖该轮阻塞。原结果 `.artifacts/issues-20260920/alex-runtime-sampler-sep22.json` 保留，仍不放宽2秒标准。
+
+CEO继续从真实trace及只读EXPLAIN定位：`UPDATE discovery_tasks ... country IN (SELECT code FROM countries WHERE enabled=0)` 会扫描任务表，即使6国全 enabled、实际目标为空，仍在schedule每tick重复执行。历史trace有81697条该语句慢项，但跨睡眠的极端时长不能当作正常SQL耗时，本段不以那些最大值估算改善。
+
+新增修改只在 `extended-discovery.ts::schedule` 的原 `BEGIN IMMEDIATE` 事务内，逐次执行 `SELECT 1 FROM countries WHERE enabled=0 LIMIT 1`；存在暂停国家才运行**原封不动的 UPDATE**。没有缓存配置、没有缩至当前cycle、没有调整running任务；恢复国家之后的下个tick立即看到当前配置，原deferred状态处理不变。CEO独立负责hourly同类守卫，本文件未跨改。
+
+`tests/runtime-discovery.test.ts` 新增2项（现6项）：全启用时连续两tick确实未发出队列UPDATE且全任务不变；同一runner先暂停MX、恢复、再暂停PK，跨两个cycle/双商店/4状态96任务的完整结果与原UPDATE深等、running不动、finished_at准确；每次国家检查与UPDATE均断言处于同一真实SQLite事务；强制暂停UPDATE抛错后全部任务与heartbeat原子回滚。没有使用真实采集或正式库写入。
+
+- `npx tsx --test tests/runtime-discovery.test.ts tests/extended-discovery.test.ts tests/alex-extended-discovery.test.ts tests/collection-coordinator.test.ts`：**30/30通过，0.909s**，`.artifacts/runtime-discovery-pause-regression.log`。
+- `npm run typecheck`及限定diffcheck通过，`.artifacts/runtime-discovery-pause-typecheck.log`。
+- 本增量首次专项即通过；再次冻结交Alex独立验证和CEO受控部署，RUN03/04仍须新正式窗口决定。

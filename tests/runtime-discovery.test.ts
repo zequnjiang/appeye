@@ -335,3 +335,128 @@ test('RUN02: runner retains market and source/detail alternation with limited fa
     store.close();
   }
 });
+
+function queuedScheduleFixture() {
+  const store = createStore();
+  store.run('UPDATE countries SET enabled=1');
+  for (const cycle of [1, 2]) {
+    store.run(
+      'INSERT INTO discovery_cycles(id,due_at,started_at,status,settings) VALUES (?,?,?,?,?)',
+      cycle,
+      hourStart,
+      hourStart,
+      cycle === 2 ? 'running' : 'completed',
+      '{}',
+    );
+    for (const country of ['th', 'mx', 'ph', 'pk', 'id', 'ar']) {
+      for (const market of ['google-play', 'app-store']) {
+        for (const status of ['queued', 'running', 'failed', 'deferred']) {
+          store.run(
+            `INSERT INTO discovery_tasks(cycle_id,country,store,kind,payload,status,created_at,finished_at,stop_reason,error,attempts)
+            VALUES(?,?,?,'detail',?,?,?,'earlier-finish','earlier-reason','earlier-error',2)`,
+            cycle,
+            country,
+            market,
+            JSON.stringify({ externalId: `${cycle}.${country}.${market}.${status}` }),
+            status,
+            hourStart,
+          );
+        }
+      }
+    }
+  }
+  return store;
+}
+const pauseSql =
+  "UPDATE discovery_tasks SET status='deferred',stop_reason='country-paused',finished_at=? WHERE status='queued' AND country IN (SELECT code FROM countries WHERE enabled=0)";
+
+test('RUN02: schedule skips empty pause updates and immediately follows country changes within its transaction', () => {
+  const store = queuedScheduleFixture();
+  try {
+    let time = new Date(hourStart),
+      checks = 0,
+      queueUpdates = 0;
+    const run = store.run.bind(store),
+      one = store.one.bind(store);
+    store.one = (sql, ...args) => {
+      if (sql === 'SELECT 1 FROM countries WHERE enabled=0 LIMIT 1') {
+        checks++;
+        assert.equal(store.db.isTransaction, true, 'Country test must share the write transaction');
+      }
+      return one(sql, ...args);
+    };
+    store.run = (sql, ...args) => {
+      if (sql === pauseSql) {
+        queueUpdates++;
+        assert.equal(store.db.isTransaction, true);
+      }
+      return run(sql, ...args);
+    };
+    const runner = createDiscoveryRunner({ store, providers: hourlyProviders(), now: () => time });
+    const initial = store.all('SELECT * FROM discovery_tasks ORDER BY id');
+    runner.schedule();
+    runner.schedule();
+    assert.equal(checks, 2);
+    assert.equal(queueUpdates, 0, 'All-enabled cycles must not issue the large queue UPDATE');
+    assert.deepEqual(store.all('SELECT * FROM discovery_tasks ORDER BY id'), initial);
+
+    const assertOriginalPause = () => {
+      store.db.exec('SAVEPOINT expected_pause');
+      run(pauseSql, time.toISOString());
+      const expected = store.all('SELECT * FROM discovery_tasks ORDER BY id');
+      store.db.exec('ROLLBACK TO expected_pause; RELEASE expected_pause');
+      runner.schedule();
+      assert.deepEqual(store.all('SELECT * FROM discovery_tasks ORDER BY id'), expected);
+    };
+    store.run("UPDATE countries SET enabled=0 WHERE code='mx'");
+    assertOriginalPause();
+    assert.equal(queueUpdates, 1);
+    assert.equal(
+      store.one(
+        "SELECT COUNT(*) n FROM discovery_tasks WHERE country='mx' AND stop_reason='country-paused'",
+      )!.n,
+      4,
+    );
+    assert.equal(
+      store.one("SELECT COUNT(*) n FROM discovery_tasks WHERE country='mx' AND status='running'")!
+        .n,
+      4,
+    );
+    // Same runner sees resume immediately; deferred rows remain deferred under the original policy.
+    store.run("UPDATE countries SET enabled=1 WHERE code='mx'");
+    const resumed = store.all('SELECT * FROM discovery_tasks ORDER BY id');
+    runner.schedule();
+    assert.equal(queueUpdates, 1);
+    assert.deepEqual(store.all('SELECT * FROM discovery_tasks ORDER BY id'), resumed);
+    // A different country paused after the prior tick cannot be hidden behind a cached flag.
+    time = new Date(time.getTime() + 60000);
+    store.run("UPDATE countries SET enabled=0 WHERE code='pk'");
+    assertOriginalPause();
+    assert.equal(queueUpdates, 2);
+    assert.equal(checks, 5);
+  } finally {
+    store.close();
+  }
+});
+
+test('RUN02: a pause update failure still rolls back the complete scheduling transaction', () => {
+  const store = queuedScheduleFixture();
+  try {
+    store.run("UPDATE countries SET enabled=0 WHERE code='mx'");
+    const tasksBefore = store.all('SELECT * FROM discovery_tasks ORDER BY id');
+    const stateBefore = store.all('SELECT * FROM discovery_state');
+    store.db.exec(`CREATE TRIGGER reject_pause BEFORE UPDATE ON discovery_tasks
+      WHEN NEW.stop_reason='country-paused' BEGIN SELECT RAISE(ABORT,'fixture pause failure'); END`);
+    const runner = createDiscoveryRunner({
+      store,
+      providers: hourlyProviders(),
+      now: () => new Date(hourStart),
+    });
+    assert.throws(() => runner.schedule(), /fixture pause failure/);
+    assert.equal(store.db.isTransaction, false);
+    assert.deepEqual(store.all('SELECT * FROM discovery_tasks ORDER BY id'), tasksBefore);
+    assert.deepEqual(store.all('SELECT * FROM discovery_state'), stateBefore);
+  } finally {
+    store.close();
+  }
+});

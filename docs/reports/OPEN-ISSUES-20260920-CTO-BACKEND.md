@@ -59,3 +59,9 @@ CTO相关测试 `runtime-summary / full-scan / scan-summary-index / manual-coale
 专项 `npx tsx --test tests/runtime-version.test.ts` **2/2**，前后端typecheck通过。验证null/空/unknown/同时间id顺序、0/false/对象等旧版本语义及新快照索引维护；独立比较有/无索引完整App返回。来源写入验证仍保原observedAt/身份/data/raw，未知app仍拒绝，且不读取snapshot。证据私有文件 `version-index-benchmark.json` / `runtime-version-tests.log`，未提交原始库。
 
 当前只完成工程自检，待Alex独立测试、受控迁移及正式原阈值运行复验。旧失败保留。
+
+## 9月22持续采样仍失败后的空暂停目标检查
+
+1cf0eea正式11流程通过，但65秒中仍2次2秒超时，原失败保留。当前六国全部enabled=1，两个scheduler仍每tick执行暂停国家队列UPDATE。扩展队列实际计划是全表SCAN；9月22完整备份的独立可丢弃APFS clone上，明明0匹配/0变化，原SQL仍耗429.326ms（小时队列3.483ms），同事务先检查6行countries再决定是否执行的路径为0.033/0.016ms。此为副本实测；跨两天trace包含机器睡眠长间隔，不能将其极端时长当SQL执行时间。
+
+小时scheduler仅增加事务内 `SELECT 1 FROM countries WHERE enabled=0 LIMIT 1`，有暂停国家时仍执行原UPDATE，国家启停不缓存。CTO同期处理扩展scheduler。Root新增两项验证全启用时不扫描队列、国家暂停下一事务立即生效、running/其它市场不变及重新启用不重新排旧任务；小时相关组合与typecheck通过。新源码/测试已冻结交Alex，正式RUN03仍需重新通过，未放宽门槛。
