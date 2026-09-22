@@ -49,3 +49,13 @@ PM 发现 #46 的最后补充值在后续成功 empty 时会被清空，但历�
 CTO相关测试 `runtime-summary / full-scan / scan-summary-index / manual-coalescing` **37/37**、1.525秒通过，覆盖已有身份首建、重复初始化、事务回滚、去重、移转、空batch及覆盖计划；Alex独立测试另行报告。真实副本初始化/查询性能与正式发布60秒运行验证仍需单独记录，不用这些确定性测试代替运行验收。
 
 真实维修前完整库的独立 APFS 副本测试（04:38:19–04:38:29Z）：新增索引及精确计数首建共10.524秒；原7,378,102个seen与派生计数一致。5次主键计数读取 **0.003–0.014ms**；候选聚合 **0.736ms**，计划使用覆盖索引、无TEMP排序。该测量属隔离副本，不当作正式环境响应时间。证据 `runtime-summary-benchmark.json`，不提交真实数据库副本。
+
+## #49 最后持续运行反例：采集中的版本历史读取
+
+52ca92b第二轮正式65秒仍有一次首页2秒硬超时，不能把11项UI流程通过当运行门槛。补充只记录慢项的get/all/run追踪后，正式collector的 `Store.appRow` 每次从完整snapshot JSON取全部version，冷读取单次实测1050/1154ms；来源附着的 `recordDiscovery` 只需确认App存在，却调用getApp连带重复版本历史。另一个候选全表UPDATE的2392/2586ms由CTO独立修复，见前端CTO报告增量；不再归因页面刷新。
+
+最小补修：`recordDiscovery` 使用主键存在性检查；010迁移增加 `(app_id,observed_at,id,json_extract(data,'$.version'))` 的非null部分索引。实际EXPLAIN由旧索引加临时排序变为COVERING INDEX，原版本JSON值、顺序和变更频率语义不改。完整真实库备份上的构建耗时8.349秒，五目标返回逐行完全相等，3.3–10.7ms温读变为0.012–0.066ms；这是备份对照，不声称正式门槛已通过。
+
+专项 `npx tsx --test tests/runtime-version.test.ts` **2/2**，前后端typecheck通过。验证null/空/unknown/同时间id顺序、0/false/对象等旧版本语义及新快照索引维护；独立比较有/无索引完整App返回。来源写入验证仍保原observedAt/身份/data/raw，未知app仍拒绝，且不读取snapshot。证据私有文件 `version-index-benchmark.json` / `runtime-version-tests.log`，未提交原始库。
+
+当前只完成工程自检，待Alex独立测试、受控迁移及正式原阈值运行复验。旧失败保留。

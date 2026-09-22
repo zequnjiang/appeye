@@ -60,6 +60,43 @@ export function expandedKeywords(country: { code: string; keywords: string[] }) 
 }
 const identityArgs = (r: Row) => [r.country, r.store, r.external_id] as [string, string, string];
 
+/** Reconcile every market, including paused countries, without rewriting admitted rows. */
+export function reconcileDiscoveryCandidates(store: Store) {
+  return store.run(`WITH matches AS MATERIALIZED (
+    SELECT c.id candidate_id,a.id app_id FROM apps a CROSS JOIN discovery_candidates c
+    WHERE a.last_fetched_at IS NOT NULL
+      AND c.country=a.country AND c.store=a.store AND c.external_id=a.external_id
+      AND (c.app_id IS NOT a.id OR c.status<>'admitted')
+  ) UPDATE discovery_candidates AS c SET app_id=matches.app_id,status='admitted'
+    FROM matches WHERE c.id=matches.candidate_id`);
+}
+
+/** Sort only task identities; fetch the durable payload after the same winner is known. */
+export function findQueuedDiscoveryTask(
+  store: Store,
+  cycleId: number,
+  country: string,
+  name: string,
+  detail: boolean,
+  sourceKind?: string,
+): Row | undefined {
+  return store.one(
+    `WITH picked AS MATERIALIZED (
+      SELECT t.id FROM discovery_tasks t
+      LEFT JOIN discovery_frontier f ON f.id=t.frontier_id
+      LEFT JOIN discovery_candidates c ON c.id=t.candidate_id
+      WHERE t.cycle_id=? AND t.country=? AND t.store=? AND t.status='queued'
+        AND ${detail ? "t.kind='detail'" : "t.kind<>'detail'"}
+        ${sourceKind ? 'AND t.kind=?' : ''}
+      ORDER BY COALESCE(c.last_served,c.created_at,f.last_served,f.created_at,''),t.id LIMIT 1
+    ) SELECT t.* FROM picked JOIN discovery_tasks t ON t.id=picked.id`,
+    cycleId,
+    country,
+    name,
+    ...(sourceKind ? [sourceKind] : []),
+  );
+}
+
 /** Sources may predate processing; every admission consults their original observation time. */
 function attachSources(store: Store, appId: number, identity: Row) {
   for (const row of store.all(
@@ -154,8 +191,7 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
     );
   };
   function enqueueDetails(cycleId: number) {
-    store.run(`UPDATE discovery_candidates AS c SET app_id=(SELECT a.id FROM apps a WHERE a.country=c.country AND a.store=c.store AND a.external_id=c.external_id),status='admitted'
-      WHERE EXISTS(SELECT 1 FROM apps a WHERE a.country=c.country AND a.store=c.store AND a.external_id=c.external_id AND a.last_fetched_at IS NOT NULL)`);
+    reconcileDiscoveryCandidates(store);
     // All pending identities remain durable even when this cycle's detail quota is exhausted.
     store.run(
       `INSERT OR IGNORE INTO discovery_tasks(cycle_id,country,store,kind,candidate_id,payload,created_at)
@@ -623,14 +659,13 @@ export function createDiscoveryRunner(options: DiscoveryOptions) {
           );
         }
         const find = (sourceKind?: string) =>
-          store.one(
-            `SELECT t.* FROM discovery_tasks t LEFT JOIN discovery_frontier f ON f.id=t.frontier_id LEFT JOIN discovery_candidates c ON c.id=t.candidate_id
-          WHERE t.cycle_id=? AND t.country=? AND t.store=? AND t.status='queued' AND ${kind}
-          ${sourceKind ? 'AND t.kind=?' : ''} ORDER BY COALESCE(c.last_served,c.created_at,f.last_served,f.created_at,''),t.id LIMIT 1`,
+          findQueuedDiscoveryTask(
+            store,
             cycle.id,
             market.country,
             market.store,
-            ...(sourceKind ? [sourceKind] : []),
+            detail,
+            sourceKind,
           );
         let task: Row | undefined;
         if (detail) task = find();

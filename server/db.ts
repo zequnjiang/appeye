@@ -404,7 +404,7 @@ export class Store {
       observedAt?: string;
     },
   ): DiscoveryObservation {
-    if (!this.getApp(appId)) throw new Error('App not found');
+    if (!this.one('SELECT id FROM apps WHERE id=?', appId)) throw new Error('App not found');
     const observedAt = input.observedAt ?? now();
     const result = this.run(
       'INSERT INTO discovery_observations(app_id,observed_at,keyword,request_country,request_language,source,data,raw) VALUES (?,?,?,?,?,?,?,?)',

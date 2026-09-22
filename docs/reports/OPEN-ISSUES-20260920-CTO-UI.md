@@ -125,3 +125,26 @@ CEO/Alex正式首轮65秒监测14请求中13成功、1次首页2003ms硬超时�
 CEO后续全套运行在新增 library 专项出现1个失败（保留 `.artifacts/issues-20260920/library-final-tests.log`）：测试将 MX 硬编码为第1号应用的“不同国家”，但 `listCountries` 按创建时间排序，全套该轮第1号实际为MX，所以正确返回1行。修正仅为测试先读取该应用实际国家，再从夹具其它国家选择不匹配市场；生产代码、国家顺序和业务过滤均未改。
 
 `npx tsx --test tests/runtime-market.test.ts` 修正后 **4/4通过**，日志 `.artifacts/runtime-library-country-fixture-recheck.log`；交 Alex 复核该单点后由 CEO 重新运行全套。前一轮全套失败记录仍保留，不用早先局部53项通过覆盖此次失败事实。
+
+### 2026-09-22：collector 候选同步与任务选择的有界补修
+
+关联 #49 RUN01/02，承接仍未通过的 RUN03。`52ca92b` 正式 RUN04 的11项操作虽已通过，65秒采样仍有1次首页2005ms超时，不能判运行门禁通过。CEO随后真实 trace 在 `2026-09-20T05:02:04.863Z` 定位 `enqueueDetails` 的候选 UPDATE 单条约2392ms及约2467ms事件循环延迟，后续同路径另有约2586ms；这些是正式运行事实，下面的备份/内存测量独立列示。
+
+本增量仅修改 `server/extended-discovery.ts` 与新增 `tests/runtime-discovery.test.ts`；其它 `db.ts::recordDiscovery` 和010索引由CEO负责。没有新DDL，没有改 `schedule`、预算、限速、市场/来源轮转、采集范围、队列恢复或原始响应，不写正式库、不重启服务、不写生产dist。
+
+**候选同步。** 原每次来源处理都会全候选相关查询并对全部匹配应用执行 UPDATE，即使 `app_id/status` 已正确。现先以 apps 为外层，用既有候选身份唯一索引查匹配，MATERIALIZED 固定需修改的集合，再按候选主键更新。`c.app_id IS NOT a.id` 保留 NULL 安全比较；已 admitted 但关联错误/为空仍修正。原 `last_fetched_at IS NOT NULL` 完全保留，包括空字符串；不按分类、候选状态或国家启用状态缩范围，暂停国家仍同步已知身份。错误、分析、原时间与尝试数等其它字段不变。后续 pending 详情入队仍使用原 enabled 国家限制。
+
+9月20已完成的只读备份→隔离内存证据 `.artifacts/runtime-discovery-candidate-probe.{ts,json,log}`：从完整 before-release 备份只读取得3563个应用的轻量身份及17328个候选（序列化约38.5MB），关闭备份后所有写操作仅发生在内存。原计划 `SCAN c + correlated apps lookup`，新计划 `MATERIALIZE matches → SCAN a → candidate unique index → candidate PK update`。原查询执行3204次无值变化写入，新查询0次，再执行仍0次；**17328条候选全部列深等**。该内存单次8.9→1.9ms是无正式磁盘写入的对照，不是正式2.4秒问题修复后的运行计时。
+
+**任务选择。** 保留完整原 WHERE、`COALESCE(c.last_served,c.created_at,f.last_served,f.created_at,'')`、task id兜底及各来源顺序，仅将排序集合投影为任务id，选中后再用主键读取完整任务。完整耐久payload/错误/response引用仍返回原值。此改动不调整公平轮转或请求预算。CEO曾记录此 SELECT 约1.33秒，但不能据此认定全部耗时来自payload搬运。
+
+9月22 `.artifacts/runtime-discovery-task-probe.{ts,json,log}` 使用同一 before-release 备份 `readOnly` 直接查询，无 Store 构造/迁移/写入：8个真实queued市场集合（单组389–2392条）、每组3轮，前后选中任务**完整行深等**。EXPLAIN确认先物化id、最后PK读取；仍有排序临时B-tree。首轮原查询6.4–43.3ms而随后的新查询0.1–0.8ms有明显先后缓存影响；暖缓存两版均约0.1–0.6ms，选中任务仅377–392字节，**不宣称固定提速倍数或已消除1.33秒全部原因**。没有为性能测量追加正式全库扫描。
+
+**自检与交接。**
+
+- 新专项4项：全状态/NULL与错误关联/empty fetched/双国家含暂停/跨店及跨国不误认/未成功占位，原 SQL 全行对照且仅34条实际变化写入，重复0写；原 enabled 入队规则与重复排程；双cycle/国家/商店/5种任务、空join、相同时刻、failed排除、16KB任务payload和161条完整取出顺序；真实runner四市场 source→detail 轮转及独立1次HTTP预算。
+- `npx tsx --test tests/runtime-discovery.test.ts tests/extended-discovery.test.ts tests/alex-extended-discovery.test.ts tests/collection-coordinator.test.ts tests/runtime-version.test.ts`：**30/30通过，0.848s**，日志 `.artifacts/runtime-discovery-regression.log`。
+- `npm run typecheck`：通过，日志 `.artifacts/runtime-discovery-typecheck.log`；限定 `git diff --check` 通过。
+- 首轮新专项3/4通过，唯一失败是测试展开成普通对象后与SQLite的 null-prototype 行直接做严格原型比较，业务字段及选择顺序无差异。已将双方都显式投影为普通对象，产品代码未为此修改；原输出 `.artifacts/runtime-discovery-tests.log` 保留。
+
+源码和专项已冻结交Alex独立验证。正式RUN03仍需由CEO完成同一唯一collector持续推进时的新窗口，并经Alex/PM验收；本段不将确定性30项或备份深等当作正式响应门禁通过。
